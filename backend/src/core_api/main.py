@@ -10,7 +10,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from core_api.auth.token_verifier import SupabaseJWTVerifier
 from core_api.config import Settings, get_settings
+from core_api.crypto import FernetFieldEncryptor
 from core_api.db import create_engine, create_session_factory
+from core_api.decisions.api.router import router as decisions_router
 from core_api.goals.api.router import router as goals_router
 from core_api.identity.api.router import router as identity_router
 
@@ -30,6 +32,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.token_verifier = SupabaseJWTVerifier(
             jwks_url, audience=settings.supabase_jwt_audience
         )
+        app.state.field_encryptor = FernetFieldEncryptor(settings.field_encryption_key)
 
         yield
 
@@ -47,6 +50,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.include_router(identity_router)
     app.include_router(goals_router)
+    app.include_router(decisions_router)
 
     @app.get("/healthz", tags=["ops"])
     async def healthz() -> dict[str, str]:

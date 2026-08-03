@@ -22,6 +22,11 @@ class Settings(BaseSettings):
 
     cors_allow_origins: list[str] = ["http://localhost:3000"]
 
+    # DEV-ONLY DEFAULT. Production must override this via VAROS_FIELD_ENCRYPTION_KEY
+    # with a key derived from AWS KMS per docs/ARCHITECTURE.md §11 — never reuse
+    # this value outside local development.
+    field_encryption_key: str = "8QaRBSQOvwlezcaKrQvir-q8zngdayjGpHYtlM3tHxc="
+
 
 @lru_cache
 def get_settings() -> Settings:

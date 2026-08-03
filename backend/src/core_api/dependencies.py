@@ -18,6 +18,9 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core_api.auth.token_verifier import TokenVerificationError, TokenVerifier, VerifiedIdentity
+from core_api.crypto import FieldEncryptor
+from core_api.decisions.domain.repositories import DecisionRepository
+from core_api.decisions.infrastructure.repository import SqlAlchemyDecisionRepository
 from core_api.goals.domain.repositories import GoalRepository
 from core_api.goals.infrastructure.repository import SqlAlchemyGoalRepository
 from core_api.identity.application.use_cases import AuthenticatedIdentity
@@ -47,6 +50,10 @@ def get_token_verifier(request: Request) -> TokenVerifier:
     return cast(TokenVerifier, request.app.state.token_verifier)
 
 
+def get_field_encryptor(request: Request) -> FieldEncryptor:
+    return cast(FieldEncryptor, request.app.state.field_encryptor)
+
+
 async def get_current_identity(
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(_bearer_scheme)],
     verifier: Annotated[TokenVerifier, Depends(get_token_verifier)],
@@ -74,3 +81,10 @@ def get_goal_repository(
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> GoalRepository:
     return SqlAlchemyGoalRepository(session)
+
+
+def get_decision_repository(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    encryptor: Annotated[FieldEncryptor, Depends(get_field_encryptor)],
+) -> DecisionRepository:
+    return SqlAlchemyDecisionRepository(session, encryptor)

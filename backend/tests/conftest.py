@@ -6,6 +6,7 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core_api.db import Base, create_engine, create_session_factory
+from core_api.decisions.infrastructure import models as decisions_models  # noqa: F401
 from core_api.goals.infrastructure import models as goals_models  # noqa: F401
 from core_api.identity.infrastructure import models as identity_models  # noqa: F401
 

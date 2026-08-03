@@ -1,6 +1,6 @@
 # VAR OS — Core API
 
-Monolito modular (Clean Architecture / DDD selectivo) descrito en `docs/ARCHITECTURE.md §4`. Bounded contexts implementados hasta ahora: **identity**, **goals**.
+Monolito modular (Clean Architecture / DDD selectivo) descrito en `docs/ARCHITECTURE.md §4`. Bounded contexts implementados hasta ahora: **identity**, **goals**, **decisions**.
 
 ## Estructura
 
@@ -9,6 +9,7 @@ src/core_api/
   main.py                  # FastAPI app factory
   config.py                # Settings (pydantic-settings, prefijo VAROS_)
   db.py                    # Engine/session compartidos + tipos SQLAlchemy comunes
+  crypto.py                 # Cifrado de campos sensibles (FieldEncryptor, docs/DATABASE.md §5)
   dependencies.py          # DI compartida (sesión de DB, identidad autenticada, repos)
   auth/
     token_verifier.py      # Verificación de JWT de Supabase (+ doble de test)
@@ -19,7 +20,10 @@ src/core_api/
     api/                     # Router FastAPI + esquemas Pydantic
   goals/
     domain/ | application/ | infrastructure/ | api/   # mismo patrón que identity
-migrations/                 # Alembic (async) — 0001 identity, 0002 goals
+  decisions/
+    domain/                # Decision (agregado raíz, máquina de estados de status)
+    application/ | infrastructure/ | api/   # infra cifra/descifra raw_input en el borde
+migrations/                 # Alembic (async) — 0001 identity, 0002 goals, 0003 decisions
 tests/
   unit/                     # Casos de uso contra fakes en memoria
   integration/               # Repositorios contra SQLite real + API contra TestClient
@@ -30,7 +34,7 @@ tests/
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-cp .env.example .env   # y completa VAROS_SUPABASE_URL
+cp .env.example .env   # y completa VAROS_SUPABASE_URL y VAROS_FIELD_ENCRYPTION_KEY
 
 # stack completo (Postgres + Redis + API) desde la raíz del repo:
 docker compose up --build
