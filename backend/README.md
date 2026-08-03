@@ -1,6 +1,6 @@
 # VAR OS — Core API
 
-Monolito modular (Clean Architecture / DDD selectivo) descrito en `docs/ARCHITECTURE.md §4`. Este servicio implementa hoy el primer bounded context: **identity**.
+Monolito modular (Clean Architecture / DDD selectivo) descrito en `docs/ARCHITECTURE.md §4`. Bounded contexts implementados hasta ahora: **identity**, **goals**.
 
 ## Estructura
 
@@ -9,7 +9,7 @@ src/core_api/
   main.py                  # FastAPI app factory
   config.py                # Settings (pydantic-settings, prefijo VAROS_)
   db.py                    # Engine/session compartidos + tipos SQLAlchemy comunes
-  dependencies.py          # DI compartida (sesión de DB, identidad autenticada)
+  dependencies.py          # DI compartida (sesión de DB, identidad autenticada, repos)
   auth/
     token_verifier.py      # Verificación de JWT de Supabase (+ doble de test)
   identity/
@@ -17,7 +17,9 @@ src/core_api/
     application/            # Casos de uso (GetOrCreateUser, UpdateUserProfile)
     infrastructure/          # Modelos SQLAlchemy + repositorios concretos
     api/                     # Router FastAPI + esquemas Pydantic
-migrations/                 # Alembic (async)
+  goals/
+    domain/ | application/ | infrastructure/ | api/   # mismo patrón que identity
+migrations/                 # Alembic (async) — 0001 identity, 0002 goals
 tests/
   unit/                     # Casos de uso contra fakes en memoria
   integration/               # Repositorios contra SQLite real + API contra TestClient

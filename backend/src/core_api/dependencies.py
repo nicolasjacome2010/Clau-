@@ -1,9 +1,11 @@
 """Shared FastAPI dependency-injection wiring.
 
 Bounded contexts expose their own use cases; this module only wires the
-cross-cutting concerns (DB session, authenticated identity) that every
-router needs, plus the identity repositories since `identity` is the only
-context implemented so far (see docs/PRD.md roadmap for what's next).
+cross-cutting concerns (DB session, authenticated identity) every router
+needs, plus a thin repository-provider function per bounded context. Use
+cases are instantiated in each context's own router, not here — this file
+only wires *what a repository needs to exist* (a DB session), not *how a
+use case uses it*.
 """
 
 from __future__ import annotations
@@ -16,6 +18,8 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core_api.auth.token_verifier import TokenVerificationError, TokenVerifier, VerifiedIdentity
+from core_api.goals.domain.repositories import GoalRepository
+from core_api.goals.infrastructure.repository import SqlAlchemyGoalRepository
 from core_api.identity.application.use_cases import AuthenticatedIdentity
 from core_api.identity.domain.repositories import UserProfileRepository, UserRepository
 from core_api.identity.infrastructure.repository import (
@@ -64,3 +68,9 @@ def get_user_profile_repository(
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> UserProfileRepository:
     return SqlAlchemyUserProfileRepository(session)
+
+
+def get_goal_repository(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> GoalRepository:
+    return SqlAlchemyGoalRepository(session)

@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from core_api.config import get_settings
 from core_api.db import Base, create_engine
+from core_api.goals.infrastructure import models as goals_models  # noqa: F401
 from core_api.identity.infrastructure import models as identity_models  # noqa: F401
 
 config = context.config
