@@ -6,8 +6,10 @@ import 'package:var_os_app/core/routing/app_routes.dart';
 import 'package:var_os_app/features/auth/presentation/screens/auth_screen.dart';
 import 'package:var_os_app/features/decisions/presentation/controllers/decisions_controller.dart';
 import 'package:var_os_app/features/home/presentation/screens/home_screen.dart';
+import 'package:var_os_app/features/memory/presentation/controllers/bias_profile_controller.dart';
 
 import '../decisions/fakes.dart';
+import '../memory/fakes.dart';
 
 void main() {
   Future<void> pumpAuth(WidgetTester tester) async {
@@ -30,6 +32,7 @@ void main() {
           decisionsRepositoryProvider.overrideWithValue(
             FakeDecisionsRepository(),
           ),
+          memoryRepositoryProvider.overrideWithValue(FakeMemoryRepository()),
         ],
         child: MaterialApp.router(routerConfig: router),
       ),

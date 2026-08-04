@@ -4,8 +4,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:var_os_app/features/decisions/domain/decisions_repository.dart';
 import 'package:var_os_app/features/decisions/presentation/controllers/decisions_controller.dart';
 import 'package:var_os_app/features/home/presentation/screens/home_screen.dart';
+import 'package:var_os_app/features/memory/presentation/controllers/bias_profile_controller.dart';
 
 import '../decisions/fakes.dart';
+import '../memory/fakes.dart';
 
 void main() {
   Future<void> pumpHome(
@@ -14,7 +16,10 @@ void main() {
   }) async {
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [decisionsRepositoryProvider.overrideWithValue(repository)],
+        overrides: [
+          decisionsRepositoryProvider.overrideWithValue(repository),
+          memoryRepositoryProvider.overrideWithValue(FakeMemoryRepository()),
+        ],
         child: const MaterialApp(home: HomeScreen()),
       ),
     );
@@ -111,6 +116,17 @@ void main() {
 
     expect(find.text('Activas'), findsOneWidget);
     expect(find.text('Oferta de trabajo Z'), findsWidgets);
+  });
+
+  testWidgets('switching to the Memoria tab shows the real bias profile', (
+    tester,
+  ) async {
+    await pumpHome(tester, repository: FakeDecisionsRepository());
+
+    await tester.tap(find.text('Memoria'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Calibración'), findsOneWidget);
   });
 
   testWidgets('tapping the mic shows a coming-soon notice', (tester) async {

@@ -3,14 +3,15 @@ import 'package:flutter/material.dart';
 import '../../../../design_system/var_breakpoints.dart';
 import '../../../../design_system/var_colors.dart';
 import '../../../decisions/presentation/widgets/my_decisions_tab_content.dart';
+import '../../../memory/presentation/widgets/memory_tab_content.dart';
 import '../../../shared/presentation/feature_placeholder_content.dart';
 import '../widgets/home_tab_content.dart';
 
 /// Pantalla 4's nav shell: "Bottom nav (mobile) / rail lateral (tablet+):
-/// Home, Mis Decisiones, Memoria, Perfil — 4 destinos máximo" — Home and
-/// Mis Decisiones (Pantalla 10) have real content; the remaining two are
-/// `FeaturePlaceholderContent` until their own modules are built (see that
-/// widget's docstring).
+/// Home, Mis Decisiones, Memoria, Perfil — 4 destinos máximo" — Home, Mis
+/// Decisiones (Pantalla 10) and Memoria (Pantalla 12) have real content;
+/// Perfil is still `FeaturePlaceholderContent` until its own module is
+/// built (see that widget's docstring).
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -39,7 +40,7 @@ class _HomeScreenState extends State<HomeScreen> {
   static const _tabs = [
     HomeTabContent(),
     MyDecisionsTabContent(),
-    FeaturePlaceholderContent(label: 'Memoria'),
+    MemoryTabContent(),
     FeaturePlaceholderContent(label: 'Perfil'),
   ];
 

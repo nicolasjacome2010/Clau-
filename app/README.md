@@ -1,6 +1,6 @@
 # VAR OS — App (Flutter)
 
-Cliente Flutter (docs/ARCHITECTURE.md §3, docs/UX_DESIGN.md). **Estado actual: fundación + Pantallas 1, 2, 3, 4 y 10 (Splash → Onboarding → Auth → Home, + Mis Decisiones) implementadas end to end.** El resto de `docs/UX_DESIGN.md` §2 (Clarificación, Simulación en vivo, Resultados, Memoria, Suscripción, Ajustes) es diseño, no código todavía — no asumas que existen solo porque están documentadas (misma regla que `CLAUDE.md` aplica al resto del repo).
+Cliente Flutter (docs/ARCHITECTURE.md §3, docs/UX_DESIGN.md). **Estado actual: fundación + Pantallas 1, 2, 3, 4, 10 y 12 (Splash → Onboarding → Auth → Home → Mis Decisiones → Memoria) implementadas end to end.** El resto de `docs/UX_DESIGN.md` §2 (Clarificación, Simulación en vivo, Resultados, Perfil de Objetivos, Suscripción, Ajustes) es diseño, no código todavía — no asumas que existen solo porque están documentadas (misma regla que `CLAUDE.md` aplica al resto del repo).
 
 ## Estructura
 
@@ -42,8 +42,15 @@ lib/
     home/                      # Pantalla 4 — "El Mapa de Realidades", REAL (no placeholder)
       presentation/
         widgets/                  # input de decisión, card de decisión activa (compacta), nav shell
+    memory/                    # Pantalla 12 — Memoria, REAL
+      domain/                    # BiasObservation, UserBiasProfile, MemoryRepository (puerto)
+      data/api_memory_repository.dart # adaptador real: GET /v1/memory/bias-profile vía Dio
+      presentation/
+        controllers/bias_profile_controller.dart # AsyncNotifier, refresh()
+        widgets/                  # calibration_gauge.dart, bias_pattern_card.dart,
+                                   # memory_tab_content.dart (botones GDPR incl.)
     shared/presentation/feature_placeholder_content.dart # contenido de los destinos del nav
-                               # shell que aún no son un módulo real (Memoria/Perfil)
+                               # shell que aún no son un módulo real (Perfil)
 test/
   design_system/              # tokens
   features/                    # un archivo de test de widget por pantalla/feature
@@ -56,8 +63,9 @@ test/
 - **`auth`/`onboarding` no hablan con un backend real todavía.** `LocalStubAuthRepository` (ver su docstring) es un adaptador interino: acepta cualquier email válido y no hace red. `OnboardingRepository` (puerto) tampoco tiene implementación concreta — capturar objetivos ocurre antes de autenticarse en el flujo real del producto (Pantalla 3 permite "probar antes de registrarse"), así que enviarlos a `POST /v1/goals` del backend solo tiene sentido una vez exista una sesión de Supabase real. Wiring de `SupabaseAuthRepository`/`ApiGoalsRepository` es el siguiente incremento de integración, no una pieza olvidada.
 - **Sin refresh de token automático en `core/network/api_client.dart`.** Depende de la misma sesión de Supabase real que `auth` todavía no tiene. Documentado en el archivo, mismo patrón que el resto del repo (p. ej. `simulations/infrastructure/reality_engine_client.py`'s "no queue yet").
 - **Home (Pantalla 4) SÍ integra con el backend real** — `ApiDecisionsRepository` llama `GET /v1/decisions` de verdad a través del `Dio` compartido; el estado "sin sesión" se ve simplemente como una lista vacía o un error con reintento, no como un mock. Lo que **no** está wireado todavía es crear una decisión: `POST /v1/decisions` exige un `vertical` (career/relationships/finance/business/relocation/conflict) que ni el wireframe de Pantalla 4 ni el de Pantalla 5 (Clarificación) especifican cómo resolver desde un único campo de texto libre — inventar un default silencioso mal-clasificaría datos reales. El campo de entrada de decisión y el ícono de micrófono son reales visualmente pero muestran un aviso "llega en un próximo módulo" al enviarse, en vez de fingir una integración que no existe. Ver el docstring de `DecisionsRepository`.
-- **El nav shell de Home tiene 4 destinos, 2 reales.** `Memoria`/`Perfil` siguen renderizando `FeaturePlaceholderContent` — el shell (bottom nav en mobile, `NavigationRail` en tablet+, docs/UX_DESIGN.md §1.6) es completo y responsive ya, cada pantalla real detrás de esos dos destinos es su propio módulo futuro.
+- **El nav shell de Home tiene 4 destinos, 3 reales.** Solo `Perfil` sigue renderizando `FeaturePlaceholderContent` — el shell (bottom nav en mobile, `NavigationRail` en tablet+, docs/UX_DESIGN.md §1.6) es completo y responsive ya.
 - **Mis Decisiones (Pantalla 10) no muestra el indicador ">60 días sin cerrar el ciclo".** El wireframe lo pide sobre decisiones completadas, pero ningún endpoint del backend expone hoy si una decisión ya tiene un `DecisionOutcome` sin hacer una llamada por decisión (`POST /v1/decisions/{id}/outcome` solo *reporta* uno — no hay un GET equivalente para verificar antes). Se documenta como ausente en vez de simularlo con una llamada N+1. Ver el docstring de `MyDecisionsTabContent`.
+- **Memoria (Pantalla 12) tiene los botones "Exportar mis datos"/"Borrar todo mi historial" visibles pero sin backend detrás.** El spec es explícito en que deben ser visibles (no escondidos en Ajustes), pero el backend no tiene ningún endpoint de exportación/borrado de datos todavía — tocarlos muestra un aviso "llega en un próximo módulo" en vez de fingir la acción. `bias.bias` se renderiza tal cual lo escribió el LLM (docs/REALITY_ENGINE.md Agente 5/12: es texto libre en español, no un código), así que no hay tabla de traducción cliente-side que mantener sincronizada.
 
 ## Desarrollo local
 
