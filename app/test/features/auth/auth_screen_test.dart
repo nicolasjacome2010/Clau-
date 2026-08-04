@@ -4,7 +4,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:var_os_app/core/routing/app_routes.dart';
 import 'package:var_os_app/features/auth/presentation/screens/auth_screen.dart';
-import 'package:var_os_app/features/home/presentation/home_placeholder_screen.dart';
+import 'package:var_os_app/features/home/presentation/controllers/active_decisions_controller.dart';
+import 'package:var_os_app/features/home/presentation/screens/home_screen.dart';
+
+import '../home/fakes.dart';
 
 void main() {
   Future<void> pumpAuth(WidgetTester tester) async {
@@ -17,12 +20,19 @@ void main() {
         ),
         GoRoute(
           path: AppRoutes.home,
-          builder: (context, state) => const HomePlaceholderScreen(),
+          builder: (context, state) => const HomeScreen(),
         ),
       ],
     );
     await tester.pumpWidget(
-      ProviderScope(child: MaterialApp.router(routerConfig: router)),
+      ProviderScope(
+        overrides: [
+          decisionsRepositoryProvider.overrideWithValue(
+            FakeDecisionsRepository(),
+          ),
+        ],
+        child: MaterialApp.router(routerConfig: router),
+      ),
     );
     await tester.pumpAndSettle();
   }
@@ -35,7 +45,7 @@ void main() {
     await tester.tap(find.text('Probar una simulación primero'));
     await tester.pumpAndSettle();
 
-    expect(find.byType(HomePlaceholderScreen), findsOneWidget);
+    expect(find.byType(HomeScreen), findsOneWidget);
   });
 
   testWidgets(
@@ -59,6 +69,6 @@ void main() {
     await tester.tap(find.text('Continuar con email'));
     await tester.pumpAndSettle();
 
-    expect(find.byType(HomePlaceholderScreen), findsOneWidget);
+    expect(find.byType(HomeScreen), findsOneWidget);
   });
 }
