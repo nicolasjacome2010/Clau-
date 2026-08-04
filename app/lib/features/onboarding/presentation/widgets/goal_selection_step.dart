@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../design_system/var_colors.dart';
 import '../../../../design_system/var_spacing.dart';
 import '../../../../design_system/var_typography.dart';
-import '../../domain/goal_option.dart';
+import '../../../goals/domain/goal_option.dart';
 import '../controllers/onboarding_controller.dart';
 import 'goal_chip.dart';
 

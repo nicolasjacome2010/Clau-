@@ -6,10 +6,12 @@ import 'package:var_os_app/core/routing/app_routes.dart';
 import 'package:var_os_app/features/clarification/presentation/screens/clarification_screen.dart';
 import 'package:var_os_app/features/decisions/domain/decisions_repository.dart';
 import 'package:var_os_app/features/decisions/presentation/controllers/decisions_controller.dart';
+import 'package:var_os_app/features/goals/presentation/controllers/goals_controller.dart';
 import 'package:var_os_app/features/home/presentation/screens/home_screen.dart';
 import 'package:var_os_app/features/memory/presentation/controllers/bias_profile_controller.dart';
 
 import '../decisions/fakes.dart';
+import '../goals/fakes.dart';
 import '../memory/fakes.dart';
 
 void main() {
@@ -39,6 +41,7 @@ void main() {
         overrides: [
           decisionsRepositoryProvider.overrideWithValue(repository),
           memoryRepositoryProvider.overrideWithValue(FakeMemoryRepository()),
+          goalsRepositoryProvider.overrideWithValue(FakeGoalsRepository()),
         ],
         child: MaterialApp.router(routerConfig: router),
       ),
@@ -147,6 +150,17 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Calibración'), findsOneWidget);
+  });
+
+  testWidgets('switching to the Perfil tab shows the real goals profile', (
+    tester,
+  ) async {
+    await pumpHome(tester, repository: FakeDecisionsRepository());
+
+    await tester.tap(find.text('Perfil'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Tus objetivos'), findsOneWidget);
   });
 
   testWidgets('tapping the mic shows a coming-soon notice', (tester) async {

@@ -1,4 +1,7 @@
-/// A selectable initial-goal chip (docs/UX_DESIGN.md, Pantalla 2, Paso 3).
+/// A suggested starter goal, offered both in Onboarding's Paso 3
+/// (docs/UX_DESIGN.md Pantalla 2) and in Perfil de Objetivos (Pantalla 13,
+/// whose spec says "mismos que onboarding") — which is why it lives in
+/// `goals/` rather than inside either screen's feature.
 ///
 /// These mirror the seed goal names the backend's `goals` bounded context
 /// expects (docs/DATABASE.md §2.3) — kept as a plain value type here, not a
