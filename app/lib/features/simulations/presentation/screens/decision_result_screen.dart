@@ -5,13 +5,15 @@ import '../../../../design_system/var_colors.dart';
 import '../../../../design_system/var_spacing.dart';
 import '../../../../design_system/var_typography.dart';
 import '../controllers/decision_simulation_controller.dart';
+import '../widgets/outcome_section.dart';
 import '../widgets/running_indicator.dart';
 import '../widgets/safety_referral.dart';
 import '../widgets/scenario_card.dart';
 import '../widgets/synthesis_section.dart';
 
-/// Pantallas 7 + 9 (docs/UX_DESIGN.md): a decision's simulated scenarios
-/// and the final synthesis, plus the entry point that runs the simulation.
+/// Pantallas 7 + 9 + 11 (docs/UX_DESIGN.md): a decision's simulated
+/// scenarios, the final synthesis, the entry point that runs the simulation,
+/// and — once it has completed — the close-the-loop prompt.
 ///
 /// Pantalla 6 ("Simulación en vivo", the stage-by-stage streaming view) is
 /// deliberately not here: it needs a pipeline-progress WebSocket the
@@ -46,6 +48,7 @@ class DecisionResultScreen extends ConsumerWidget {
       body: SafeArea(
         child: asyncState.when(
           data: (state) => _Body(
+            decisionId: decisionId,
             state: state,
             onRun: () => ref.read(provider.notifier).run(),
           ),
@@ -63,8 +66,13 @@ class DecisionResultScreen extends ConsumerWidget {
 }
 
 class _Body extends StatelessWidget {
-  const _Body({required this.state, required this.onRun});
+  const _Body({
+    required this.decisionId,
+    required this.state,
+    required this.onRun,
+  });
 
+  final String decisionId;
   final DecisionSimulationState state;
   final VoidCallback onRun;
 
@@ -115,6 +123,16 @@ class _Body extends StatelessWidget {
           SynthesisSection(
             synthesis: simulation.synthesisText!,
             reflectiveQuestion: simulation.reflectiveQuestion,
+          ),
+        ],
+        // Only offered against a *completed* simulation: `POST
+        // /v1/decisions/{id}/outcome` answers 409 without one, and there is
+        // nothing to calibrate against either way.
+        if (simulation.isCompleted) ...[
+          const SizedBox(height: VarSpacing.md),
+          OutcomeSection(
+            decisionId: decisionId,
+            scenarios: simulation.scenarios,
           ),
         ],
         const SizedBox(height: VarSpacing.lg),

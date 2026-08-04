@@ -1,9 +1,11 @@
 import 'package:dio/dio.dart';
 
+import '../domain/decision_outcome.dart';
 import '../domain/simulation.dart';
 import '../domain/simulations_repository.dart';
 
-/// Real adapter over `GET`/`POST /v1/decisions/{id}/simulations`.
+/// Real adapter over `GET`/`POST /v1/decisions/{id}/simulations` and
+/// `POST /v1/decisions/{id}/outcome`.
 class ApiSimulationsRepository implements SimulationsRepository {
   ApiSimulationsRepository(this._dio);
 
@@ -111,5 +113,61 @@ class ApiSimulationsRepository implements SimulationsRepository {
       );
     }
     return _toSimulation(response.data);
+  }
+
+  @override
+  Future<DecisionOutcome> reportOutcome({
+    required String decisionId,
+    required String reportedOutcome,
+  }) async {
+    final Response<dynamic> response;
+    try {
+      response = await _dio.post<dynamic>(
+        '/v1/decisions/$decisionId/outcome',
+        data: {'reported_outcome': reportedOutcome},
+        // Calibration is one more synchronous Reality Engine round trip
+        // (Agente 12), so the app-wide default is just as wrong here as it
+        // is for `runSimulation` — a single agent, but the same provider.
+        options: Options(receiveTimeout: _runTimeout, sendTimeout: _runTimeout),
+      );
+    } on DioException catch (exc) {
+      // The two statuses the backend gives distinct meaning to get distinct
+      // types, so the screen can say something true instead of a generic
+      // "algo salió mal" (see this router's own `HTTPException`s).
+      final status = exc.response?.statusCode;
+      if (status == 409) {
+        throw NoCompletedSimulationError(
+          'Decision has no completed simulation to report against',
+        );
+      }
+      if (status == 503) {
+        throw CalibrationUnavailableError(
+          'Calibration is temporarily unavailable',
+        );
+      }
+      throw SimulationsRepositoryError(
+        'Failed to report outcome: ${exc.message}',
+      );
+    }
+    return _toOutcome(response.data);
+  }
+
+  DecisionOutcome _toOutcome(Object? raw) {
+    if (raw is! Map) {
+      throw SimulationsRepositoryError('Unexpected outcome shape');
+    }
+    final errors = raw['system_errors_identified'];
+
+    return DecisionOutcome(
+      id: raw['id'] as String,
+      decisionId: raw['decision_id'] as String,
+      reportedOutcome: raw['reported_outcome'] as String,
+      closestScenarioId: raw['closest_scenario_id'] as String?,
+      calibrationDelta: (raw['calibration_delta'] as num? ?? 0).toDouble(),
+      systemErrorsIdentified: errors is List
+          ? errors.whereType<String>().toList()
+          : const [],
+      reportedAt: DateTime.parse(raw['reported_at'] as String),
+    );
   }
 }

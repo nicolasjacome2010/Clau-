@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:var_os_app/features/simulations/domain/decision_outcome.dart';
 import 'package:var_os_app/features/simulations/domain/simulation.dart';
 import 'package:var_os_app/features/simulations/domain/simulations_repository.dart';
 
@@ -10,11 +11,21 @@ class FakeSimulationsRepository implements SimulationsRepository {
     this.runError,
     this.ranSimulation,
     this.runGate,
+    this.outcomeError,
+    this.reportedOutcome,
+    this.outcomeGate,
   }) : simulations = simulations ?? const [];
 
   final List<Simulation> simulations;
   final SimulationsRepositoryError? listError;
   final SimulationsRepositoryError? runError;
+  final SimulationsRepositoryError? outcomeError;
+
+  /// What `reportOutcome` returns on success.
+  final DecisionOutcome? reportedOutcome;
+
+  /// Same purpose as `runGate`, for the calibration round trip.
+  final Completer<void>? outcomeGate;
 
   /// What `runSimulation` returns on success. Left `null` when a test only
   /// cares about the failure path.
@@ -28,6 +39,10 @@ class FakeSimulationsRepository implements SimulationsRepository {
 
   /// Every decision id `runSimulation` was called with, in order.
   final List<String> runCalls = [];
+
+  /// Every `reportOutcome` call, in order — lets a test assert on exactly
+  /// what would reach `POST /v1/decisions/{id}/outcome`.
+  final List<({String decisionId, String reportedOutcome})> outcomeCalls = [];
 
   @override
   Future<List<Simulation>> listForDecision(String decisionId) async {
@@ -49,6 +64,41 @@ class FakeSimulationsRepository implements SimulationsRepository {
           ],
         );
   }
+
+  @override
+  Future<DecisionOutcome> reportOutcome({
+    required String decisionId,
+    required String reportedOutcome,
+  }) async {
+    outcomeCalls.add((
+      decisionId: decisionId,
+      reportedOutcome: reportedOutcome,
+    ));
+    if (outcomeGate != null) await outcomeGate!.future;
+    if (outcomeError != null) throw outcomeError!;
+    return this.reportedOutcome ??
+        testOutcome(decisionId: decisionId, reportedOutcome: reportedOutcome);
+  }
+}
+
+DecisionOutcome testOutcome({
+  String id = 'outcome-1',
+  String decisionId = 'd1',
+  String reportedOutcome = 'Acepté la oferta.',
+  String? closestScenarioId,
+  double calibrationDelta = 0,
+  List<String> systemErrorsIdentified = const [],
+  DateTime? reportedAt,
+}) {
+  return DecisionOutcome(
+    id: id,
+    decisionId: decisionId,
+    reportedOutcome: reportedOutcome,
+    closestScenarioId: closestScenarioId,
+    calibrationDelta: calibrationDelta,
+    systemErrorsIdentified: systemErrorsIdentified,
+    reportedAt: reportedAt ?? DateTime.utc(2026, 7, 1),
+  );
 }
 
 /// Builds a `Simulation` with defaults for everything a given test isn't

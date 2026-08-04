@@ -9,11 +9,17 @@ import 'package:var_os_app/features/simulations/domain/simulations_repository.da
 /// Same `httpx.MockTransport` equivalent the other repository tests use: no
 /// real network, so this exercises our parsing, not connectivity.
 class _FakeHttpClientAdapter implements HttpClientAdapter {
-  _FakeHttpClientAdapter.json(this._body) : _throws = null;
-  _FakeHttpClientAdapter.throwing(Object error) : _body = null, _throws = error;
+  _FakeHttpClientAdapter.json(this._body, {int status = 200})
+    : _throws = null,
+      _status = status;
+  _FakeHttpClientAdapter.throwing(Object error)
+    : _body = null,
+      _throws = error,
+      _status = 200;
 
   final String? _body;
   final Object? _throws;
+  final int _status;
 
   /// The options of every request that reached the adapter, so a test can
   /// assert on what was actually sent (the long run timeout, notably).
@@ -29,7 +35,7 @@ class _FakeHttpClientAdapter implements HttpClientAdapter {
     if (_throws != null) throw _throws;
     return ResponseBody.fromString(
       _body!,
-      200,
+      _status,
       headers: {
         Headers.contentTypeHeader: [Headers.jsonContentType],
       },
@@ -201,6 +207,105 @@ void main() {
     expect(
       ApiSimulationsRepository(dio).listForDecision('d1'),
       throwsA(isA<SimulationsRepositoryError>()),
+    );
+  });
+
+  test('reportOutcome posts the text and parses the calibration', () async {
+    final adapter = _FakeHttpClientAdapter.json(
+      jsonEncode({
+        'id': 'o1',
+        'decision_id': 'd1',
+        'reported_outcome': 'Acepté la oferta.',
+        'closest_scenario_id': 's1',
+        'calibration_delta': 24.5,
+        'system_errors_identified': ['Subestimamos el tiempo de adaptación'],
+        'reported_at': '2026-07-01T00:00:00Z',
+      }),
+    );
+    final dio = _dioWith(adapter);
+
+    final outcome = await ApiSimulationsRepository(
+      dio,
+    ).reportOutcome(decisionId: 'd1', reportedOutcome: 'Acepté la oferta.');
+
+    expect(outcome.id, 'o1');
+    expect(outcome.closestScenarioId, 's1');
+    expect(outcome.matchedNoScenario, isFalse);
+    expect(outcome.calibrationDelta, 24.5);
+    expect(outcome.systemErrorsIdentified, [
+      'Subestimamos el tiempo de adaptación',
+    ]);
+    expect(adapter.requests.single.method, 'POST');
+    expect(adapter.requests.single.path, '/v1/decisions/d1/outcome');
+    expect(adapter.requests.single.data, {
+      'reported_outcome': 'Acepté la oferta.',
+    });
+  });
+
+  test('reportOutcome keeps a null closest scenario as a blind spot', () async {
+    final dio = _dioWith(
+      _FakeHttpClientAdapter.json(
+        jsonEncode({
+          'id': 'o1',
+          'decision_id': 'd1',
+          'reported_outcome': 'Pasó otra cosa.',
+          'closest_scenario_id': null,
+          'calibration_delta': -10,
+          'system_errors_identified': <String>[],
+          'reported_at': '2026-07-01T00:00:00Z',
+        }),
+      ),
+    );
+
+    final outcome = await ApiSimulationsRepository(
+      dio,
+    ).reportOutcome(decisionId: 'd1', reportedOutcome: 'Pasó otra cosa.');
+
+    expect(outcome.matchedNoScenario, isTrue);
+  });
+
+  test('maps 409 to NoCompletedSimulationError', () async {
+    final dio = _dioWith(
+      _FakeHttpClientAdapter.json(jsonEncode({'detail': 'nope'}), status: 409),
+    );
+
+    expect(
+      ApiSimulationsRepository(
+        dio,
+      ).reportOutcome(decisionId: 'd1', reportedOutcome: 'algo'),
+      throwsA(isA<NoCompletedSimulationError>()),
+    );
+  });
+
+  test('maps 503 to CalibrationUnavailableError', () async {
+    final dio = _dioWith(
+      _FakeHttpClientAdapter.json(jsonEncode({'detail': 'down'}), status: 503),
+    );
+
+    expect(
+      ApiSimulationsRepository(
+        dio,
+      ).reportOutcome(decisionId: 'd1', reportedOutcome: 'algo'),
+      throwsA(isA<CalibrationUnavailableError>()),
+    );
+  });
+
+  test('maps any other outcome failure to the base error type', () async {
+    final dio = _dioWith(
+      _FakeHttpClientAdapter.json(jsonEncode({'detail': 'boom'}), status: 500),
+    );
+
+    expect(
+      ApiSimulationsRepository(
+        dio,
+      ).reportOutcome(decisionId: 'd1', reportedOutcome: 'algo'),
+      throwsA(
+        allOf(
+          isA<SimulationsRepositoryError>(),
+          isNot(isA<NoCompletedSimulationError>()),
+          isNot(isA<CalibrationUnavailableError>()),
+        ),
+      ),
     );
   });
 

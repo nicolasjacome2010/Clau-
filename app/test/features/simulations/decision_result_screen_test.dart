@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:var_os_app/core/routing/app_routes.dart';
 import 'package:var_os_app/features/decisions/domain/decision_ref.dart';
 import 'package:var_os_app/features/decisions/presentation/controllers/decisions_controller.dart';
+import 'package:var_os_app/features/memory/presentation/controllers/bias_profile_controller.dart';
 import 'package:var_os_app/features/simulations/domain/simulation.dart';
 import 'package:var_os_app/features/simulations/domain/simulations_repository.dart';
 import 'package:var_os_app/features/simulations/presentation/controllers/decision_simulation_controller.dart';
@@ -17,6 +18,7 @@ import 'package:var_os_app/features/simulations/presentation/widgets/scenario_ca
 import 'package:var_os_app/features/simulations/presentation/widgets/synthesis_section.dart';
 
 import '../decisions/fakes.dart';
+import '../memory/fakes.dart';
 import 'fakes.dart';
 
 void main() {
@@ -51,6 +53,9 @@ void main() {
           decisionsRepositoryProvider.overrideWithValue(
             FakeDecisionsRepository(),
           ),
+          // Closing the loop recalibrates the bias profile, so the screen
+          // reaches into `memory` to refresh it.
+          memoryRepositoryProvider.overrideWithValue(FakeMemoryRepository()),
         ],
         child: MaterialApp.router(routerConfig: router),
       ),

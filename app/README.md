@@ -1,6 +1,6 @@
 # VAR OS — App (Flutter)
 
-Cliente Flutter (docs/ARCHITECTURE.md §3, docs/UX_DESIGN.md). **Estado actual: fundación + Pantallas 1, 2, 3, 4, 5, 7, 9, 10, 12 y 13 implementadas end to end (Splash → Onboarding → Auth → Home → Clarificación → Resultados/Síntesis, + Mis Decisiones, Memoria y Perfil de Objetivos en el nav shell), y tanto la creación de decisiones como la simulación funcionan contra el backend real.** Los 4 destinos del nav shell son reales: ya no queda ningún placeholder. El resto de `docs/UX_DESIGN.md` §2 (Simulación en vivo, Comparación, Cierre de ciclo, Suscripción, Ajustes) es diseño, no código todavía — no asumas que existen solo porque están documentadas (misma regla que `CLAUDE.md` aplica al resto del repo).
+Cliente Flutter (docs/ARCHITECTURE.md §3, docs/UX_DESIGN.md). **Estado actual: fundación + Pantallas 1, 2, 3, 4, 5, 7, 9, 10, 11, 12 y 13 implementadas end to end (Splash → Onboarding → Auth → Home → Clarificación → Resultados/Síntesis → Cierre de ciclo, + Mis Decisiones, Memoria y Perfil de Objetivos en el nav shell), y la creación de decisiones, la simulación y el cierre de ciclo funcionan contra el backend real.** Los 4 destinos del nav shell son reales: ya no queda ningún placeholder. El resto de `docs/UX_DESIGN.md` §2 (Simulación en vivo, Comparación, Suscripción, Ajustes) es diseño, no código todavía — no asumas que existen solo porque están documentadas (misma regla que `CLAUDE.md` aplica al resto del repo).
 
 ## Estructura
 
@@ -59,17 +59,22 @@ lib/
         controllers/bias_profile_controller.dart # AsyncNotifier, refresh()
         widgets/                  # calibration_gauge.dart, bias_pattern_card.dart,
                                    # memory_tab_content.dart (botones GDPR incl.)
-    simulations/               # Pantallas 7 + 9 — escenarios y síntesis, REAL. Se abre tocando
-                               # cualquier decisión (Home o Mis Decisiones)
+    simulations/               # Pantallas 7 + 9 + 11 — escenarios, síntesis y cierre de ciclo,
+                               # REAL. Se abre tocando cualquier decisión (Home o Mis Decisiones)
       domain/                    # Simulation, SimulationScenario, GoalAlignment,
-                                 # SafetyGateResult (requiresReferral), SimulationsRepository
+                                 # SafetyGateResult (requiresReferral), DecisionOutcome,
+                                 # SimulationsRepository (+ errores tipados 409/503)
       data/api_simulations_repository.dart # adaptador real: GET/POST
-                                            # /v1/decisions/{id}/simulations (timeout largo)
+                                            # /v1/decisions/{id}/simulations y
+                                            # POST /v1/decisions/{id}/outcome (timeout largo)
       presentation/
         controllers/decision_simulation_controller.dart # AsyncNotifier .family por decisión
+        controllers/decision_outcome_controller.dart    # Notifier .family — no hay nada que
+                                                         # cargar, solo que reportar
         widgets/                  # score_bar.dart (0-100 con polaridad), scenario_card.dart,
                                    # synthesis_section.dart, safety_referral.dart,
-                                   # running_indicator.dart
+                                   # running_indicator.dart, outcome_section.dart,
+                                   # calibration_needle.dart
     shared/presentation/       # widgets que ninguna feature es dueña: step_indicator.dart
                                # (Onboarding y Clarificación)
 test/
@@ -93,6 +98,10 @@ test/
 - **Resultados (Pantallas 7 + 9) muestra una espera indeterminada, no la Pantalla 6.** `POST /v1/decisions/{id}/simulations` bloquea durante todo el pipeline (15-30s) y no hay canal de progreso, así que la pantalla muestra un spinner honesto — y pasados ~15s el micro-copy tranquilizador que el spec pide — en vez de una barra de progreso sintética que fingiría saber en qué etapa va. `ApiSimulationsRepository` sube el timeout a 90s para esa llamada, porque el default de 10s abortaría una corrida perfectamente sana.
 - **Un `halt_and_refer` del Safety Gate reemplaza *todo* el resultado.** `SafetyReferral` se comprueba antes que cualquier otra cosa: aunque el payload traiga escenarios y síntesis, no se renderiza ninguno, y no hay escape del tipo "ver de todos modos" (docs/PRD.md §18: "se niega y redirige"). Un `safe_to_proceed: false` sin `recommended_action` explícito también refiere — falla hacia lo conservador, igual que `SafetyGateAgent` en el Reality Engine. A la inversa, un `safety_gate_result` vacío (una corrida que falló *antes* de llegar al Agente 0) **no** se lee como crisis: se reporta como fallo, que es lo que es.
 - **`SafetyReferral` no hardcodea números de crisis, a propósito.** Los recursos son específicos por país e idioma, y un número equivocado o muerto mostrado a alguien en crisis es peor que ninguno. La copy apunta a ayuda profesional en términos generales; una lista real, localizada y revisada por los profesionales que docs/PRD.md §18 ya exige antes de lanzar es un entregable requerido, no un pulido opcional. Ver el docstring del widget.
+- **El cierre de ciclo (Pantalla 11) vive al pie de la pantalla de resultados, no en una pantalla propia.** El spec la llama "detalle de decisión pasada + cierre de ciclo", y el detalle de una decisión pasada es exactamente lo que Pantallas 7+9 ya renderizan; separarlas obligaría a re-pedir la misma simulación para mostrar los mismos escenarios encima del mismo prompt. Solo se ofrece sobre una simulación `completed`: sin ella `POST /v1/decisions/{id}/outcome` responde 409 y no habría nada contra qué calibrar.
+- **El cliente no puede saber si el ciclo de una decisión ya se cerró.** No existe `GET /v1/decisions/{id}/outcome`, así que al abrir una decisión el prompt se ofrece siempre; y como `ReportDecisionOutcomeUseCase` tampoco tiene guardia de duplicados, reportar dos veces calibra dos veces. Se documenta en vez de disimularlo con una caché local que el cliente no puede verificar. Arreglarlo es backend (un `GET`, o un upsert por `decision_id`), no un rodeo cliente-side. Es también el mismo hueco que impide el indicador ">60 días" de Pantalla 10.
+- **El resultado de la calibración se muestra crudo, sin interpretarlo.** `calibration_delta` va de -100 a 100 y ni docs/REALITY_ENGINE.md define qué significa su signo — `UserBiasProfile.with_calibration_delta` llama a su propia fórmula "a starting formula, not a validated calibration model". La aguja anima de 0 al valor reportado (la microinteracción que pide el spec: "una aguja que se ajusta sutilmente") y el número se muestra tal cual; no hay copy del tipo "¡acertamos un 72%!". Lo que sí se muestra en palabras es `system_errors_identified`: en qué se equivocó la simulación, según el propio Agente 12.
+- **Un `closest_scenario_id` nulo se dice, no se disimula.** docs/REALITY_ENGINE.md §2 trata "lo que pasó no se parece a ningún escenario" como un resultado valioso —un punto ciego del sistema— y prohíbe forzar una coincidencia; el cliente lo enuncia como tal en vez de elegir el escenario más cercano por su cuenta.
 - **Memoria (Pantalla 12) tiene los botones "Exportar mis datos"/"Borrar todo mi historial" visibles pero sin backend detrás.** El spec es explícito en que deben ser visibles (no escondidos en Ajustes), pero el backend no tiene ningún endpoint de exportación/borrado de datos todavía — tocarlos muestra un aviso "llega en un próximo módulo" en vez de fingir la acción. `bias.bias` se renderiza tal cual lo escribió el LLM (docs/REALITY_ENGINE.md Agente 5/12: es texto libre en español, no un código), así que no hay tabla de traducción cliente-side que mantener sincronizada.
 
 ## Desarrollo local
