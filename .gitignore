@@ -220,3 +220,10 @@ __marimo__/
 # Per-service Python virtualenvs (this repo has multiple Python projects)
 reality_engine/.venv/
 backend/.venv/
+
+# The Python-oriented `lib/` rule above (packaging convention) would also
+# match the Flutter client's own `app/lib/` source tree — un-ignore it
+# explicitly rather than narrowing the Python rule, since other tools in
+# this repo may still rely on the broad pattern.
+!app/lib/
+!app/lib/**
