@@ -5,6 +5,7 @@ from collections.abc import AsyncIterator
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core_api.billing.infrastructure import models as billing_models  # noqa: F401
 from core_api.db import Base, create_engine, create_session_factory
 from core_api.decisions.infrastructure import models as decisions_models  # noqa: F401
 from core_api.goals.infrastructure import models as goals_models  # noqa: F401

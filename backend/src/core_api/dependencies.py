@@ -18,6 +18,12 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core_api.auth.token_verifier import TokenVerificationError, TokenVerifier, VerifiedIdentity
+from core_api.billing.domain.repositories import StripeEventRepository, SubscriptionRepository
+from core_api.billing.domain.stripe_port import StripeClient
+from core_api.billing.infrastructure.repository import (
+    SqlAlchemyStripeEventRepository,
+    SqlAlchemySubscriptionRepository,
+)
 from core_api.crypto import FieldEncryptor
 from core_api.decisions.domain.repositories import DecisionRepository
 from core_api.decisions.infrastructure.repository import SqlAlchemyDecisionRepository
@@ -67,6 +73,10 @@ def get_field_encryptor(request: Request) -> FieldEncryptor:
 
 def get_reality_engine_client(request: Request) -> RealityEngineClient:
     return cast(RealityEngineClient, request.app.state.reality_engine_client)
+
+
+def get_stripe_client(request: Request) -> StripeClient:
+    return cast(StripeClient, request.app.state.stripe_client)
 
 
 async def get_current_identity(
@@ -127,3 +137,15 @@ def get_memory_embedding_repository(
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> MemoryEmbeddingRepository:
     return SqlAlchemyMemoryEmbeddingRepository(session)
+
+
+def get_subscription_repository(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> SubscriptionRepository:
+    return SqlAlchemySubscriptionRepository(session)
+
+
+def get_stripe_event_repository(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> StripeEventRepository:
+    return SqlAlchemyStripeEventRepository(session)

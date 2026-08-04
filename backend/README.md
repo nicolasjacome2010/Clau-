@@ -1,6 +1,6 @@
 # VAR OS — Core API
 
-Monolito modular (Clean Architecture / DDD selectivo) descrito en `docs/ARCHITECTURE.md §4`. Bounded contexts implementados hasta ahora: **identity**, **goals**, **decisions**, **simulations**, **memory**.
+Monolito modular (Clean Architecture / DDD selectivo) descrito en `docs/ARCHITECTURE.md §4`. Bounded contexts implementados hasta ahora: **identity**, **goals**, **decisions**, **simulations**, **memory**, **billing**.
 
 ## Estructura
 
@@ -39,8 +39,16 @@ src/core_api/
     application/                       # incluye dedup por similitud > 0.92 al guardar un embedding
     infrastructure/                     # embedding como JSON — ver docstring del repo para la migración a pgvector
     api/                              # /v1/memory/bias-profile, /v1/memory/embeddings(/search)
+  billing/
+    domain/stripe_port.py            # puerto + DTOs propios — nunca importa el SDK `stripe` directamente
+    domain/                           # Subscription (réplica de solo-lectura), StripeEvent (append-only)
+    application/                       # Get/CreateCheckoutSession/CreatePortalSession +
+                                        # HandleStripeWebhookEventUseCase (idempotente por stripe_event_id)
+    infrastructure/
+      stripe_client.py                 # adaptador real (stripe.StripeClient, *_async — no bloquea el loop)
+    api/                              # /v1/billing/subscription, /checkout-session, /portal-session, /webhook
 migrations/                 # Alembic (async) — 0001 identity, 0002 goals, 0003 decisions,
-                             # 0004 simulations, 0005 memory, 0006 decision_outcomes
+                             # 0004 simulations, 0005 memory, 0006 decision_outcomes, 0007 billing
 tests/
   unit/                     # Casos de uso contra fakes en memoria
   integration/               # Repositorios contra SQLite real + API contra TestClient
@@ -63,6 +71,8 @@ uvicorn core_api.main:app --reload
 `simulations` necesita el servicio `reality_engine/` corriendo y alcanzable en `VAROS_REALITY_ENGINE_BASE_URL` (por defecto `http://localhost:8100`) para que `POST /v1/decisions/{id}/simulations` funcione — sin `OPENAI_API_KEY` configurada ahí, el Reality Engine sigue respondiendo pero siempre falla seguro (`HALT_AND_REFER`), así que la simulación se crea igual, con `status=partial`.
 
 Cuando una simulación se completa y el Reality Engine incluyó un resumen de memoria (Agente 11), `RunSimulationUseCase` lo persiste automáticamente en `memory` — sin bloquear la simulación si el Reality Engine no lo produjo. `POST /v1/decisions/{id}/outcome` cierra el ciclo (docs/PRD.md CU8): reenvía los escenarios de la última simulación completada al Reality Engine (`/v1/calibrate`, Agente 12) junto con lo que el usuario reporta que pasó realmente, y persiste tanto el `DecisionOutcome` como el efecto en `UserBiasProfile`.
+
+`billing` necesita `VAROS_STRIPE_SECRET_KEY`/`VAROS_STRIPE_WEBHOOK_SECRET` (ver `.env.example`) para crear sesiones de Checkout/Customer Portal reales y para verificar la firma de los webhooks — sin ellos, `/v1/billing/checkout-session` y `/v1/billing/portal-session` devuelven 503, y `/v1/billing/webhook` rechaza todo con 400 (fail-closed, no fail-open, misma postura que el Safety Gate del Reality Engine). Stripe es la fuente de verdad del estado de suscripción (docs/ARCHITECTURE.md §9): `Subscription` es una réplica de solo lectura que solo `HandleStripeWebhookEventUseCase` escribe, y `stripe_events` es un log append-only de idempotencia — un evento reenviado por Stripe (reintenta hasta recibir 2xx) es un no-op, nunca se reaplica.
 
 ## Migraciones
 

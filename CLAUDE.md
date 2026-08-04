@@ -9,10 +9,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 1. `docs/PRD.md` — vision, users, user stories, navigation map, roadmap, business model, KPIs.
 2. `docs/ARCHITECTURE.md` — system architecture, service boundaries, and **§0 explicitly documents where the implementation deviates from the original brief and why** (multi-provider AI gateway instead of OpenAI-only, modular monolith instead of microservices-from-day-1, pgvector instead of a separate vector DB). Read §0 before assuming the brief's stack is followed literally.
 3. `docs/REALITY_ENGINE.md` — the 13-agent decision-simulation pipeline (Safety Gate → Comprehension → ... → Learning), each agent's prompt/input/output JSON contract and error handling. **All 13 agents are now implemented** (see `reality_engine/`): Agents 0-10 run inline in `AnalysisPipeline`/`SimulationPipeline`; Agent 11 (Memoria) runs at the end of `SimulationPipeline` and is an enhancement, never a failure reason; Agent 12 (Aprendizaje) is deliberately outside both pipelines, behind its own on-demand `POST /v1/calibrate` endpoint.
-4. `docs/DATABASE.md` — full normalized schema. Implemented so far: `identity` (`users`, `user_profiles`), `goals`, `decisions`, `simulations`/`simulation_scenarios`/`decision_outcomes` (`simulation_steps` and the separate `simulation_synthesis` table are not — see `simulations/infrastructure/models.py`), and `user_bias_profile`/`memory_embeddings` (the latter stores its vector as JSON, not pgvector's `vector(1536)` — see `memory/infrastructure/repository.py`); the rest is design-only.
+4. `docs/DATABASE.md` — full normalized schema. Implemented so far: `identity` (`users`, `user_profiles`), `goals`, `decisions`, `simulations`/`simulation_scenarios`/`decision_outcomes` (`simulation_steps` and the separate `simulation_synthesis` table are not — see `simulations/infrastructure/models.py`), `user_bias_profile`/`memory_embeddings` (the latter stores its vector as JSON, not pgvector's `vector(1536)` — see `memory/infrastructure/repository.py`), and `subscriptions`/`stripe_events` (§2.12-2.13); the rest is design-only.
 5. `docs/UX_DESIGN.md` — screen-by-screen design system (color, type, motion, wireframes) for the future Flutter client. Not yet implemented.
 
-Only **Core API modules 1-5 ("identity", "goals", "decisions", "simulations", "memory")** plus **Reality Engine Agents 0-12 (all 13)** have been built. Everything else in those docs is design, not yet code — don't assume a feature exists just because it's documented.
+Only **Core API modules 1-6 ("identity", "goals", "decisions", "simulations", "memory", "billing")** plus **Reality Engine Agents 0-12 (all 13)** have been built. Everything else in those docs is design, not yet code — don't assume a feature exists just because it's documented.
 
 ## Repository layout
 
@@ -32,9 +32,12 @@ backend/         Core API service (Python/FastAPI, Clean Architecture monolith �
                                                         # ReportDecisionOutcomeUseCase (Agent 12, closes the loop)
     memory/domain/similarity.py                       # pure cosine_similarity, no numpy
     memory/domain|application|infrastructure|api       # UserBiasProfile (weighted-average updates), MemoryEmbedding
+    billing/domain/stripe_port.py                     # port + its OWN DTOs — never imports the `stripe` SDK
+    billing/domain|application|infrastructure|api      # Subscription (Stripe-is-source-of-truth read replica),
+                                                        # StripeEvent (append-only webhook idempotency log)
   migrations/    Alembic (async, drives off core_api.config.Settings, not a static URL in alembic.ini)
                  0001 identity, 0002 goals, 0003 decisions, 0004 simulations+simulation_scenarios, 0005 memory,
-                 0006 decision_outcomes
+                 0006 decision_outcomes, 0007 billing (subscriptions+stripe_events)
   tests/unit/    Use cases against in-memory fakes of the domain repository interfaces
   tests/integration/  Repositories against a real SQLite round-trip; API against FastAPI TestClient;
                        the Reality Engine HTTP client against an httpx.MockTransport (no real network)
@@ -60,7 +63,7 @@ docker-compose.yml   Full local stack: Postgres (pgvector image) + Redis + core-
 .github/workflows/backend-ci.yml, reality-engine-ci.yml   Lint (ruff) + type check (mypy --strict) + tests, each path-filtered to its own service directory
 ```
 
-There is no Flutter client or Billing service yet. All 13 Reality Engine agents are implemented, and Core API is fully wired to Agents 11-12: `RunSimulationUseCase` persists Agent 11's memory summary/embedding into `memory` when present (never blocking the simulation if absent), and `ReportDecisionOutcomeUseCase` (`POST /v1/decisions/{id}/outcome`) sends a past simulation's scenarios back to Agent 12 via `/v1/calibrate`, then persists the resulting `DecisionOutcome` and its effect on `UserBiasProfile`. `simulations` calls `reality_engine`'s `/v1/simulate` and `/v1/calibrate` synchronously over HTTP (`simulations/infrastructure/reality_engine_client.py`) — there's no queue yet (see that module's docstring for why that's an accepted, documented gap, not an oversight).
+There is no Flutter client yet — `billing` is implemented as a bounded context inside the Core API monolith, not the separate microservice the original brief described (docs/ARCHITECTURE.md §0's "modular monolith, not microservices-from-day-1" deviation applies here too). All 13 Reality Engine agents are implemented, and Core API is fully wired to Agents 11-12: `RunSimulationUseCase` persists Agent 11's memory summary/embedding into `memory` when present (never blocking the simulation if absent), and `ReportDecisionOutcomeUseCase` (`POST /v1/decisions/{id}/outcome`) sends a past simulation's scenarios back to Agent 12 via `/v1/calibrate`, then persists the resulting `DecisionOutcome` and its effect on `UserBiasProfile`. `simulations` calls `reality_engine`'s `/v1/simulate` and `/v1/calibrate` synchronously over HTTP (`simulations/infrastructure/reality_engine_client.py`) — there's no queue yet (see that module's docstring for why that's an accepted, documented gap, not an oversight). `billing` integrates Stripe (Checkout, Customer Portal, webhooks) via `billing/infrastructure/stripe_client.py`'s `StripeApiClient`, with `subscriptions` as a read-only replica of Stripe's own state and `stripe_events` as an append-only idempotency log (docs/ARCHITECTURE.md §9) — no `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET` in CI or this environment, so the real adapter is tested against a mocked `stripe.StripeClient`, never the network.
 
 ## Commands
 
@@ -87,7 +90,7 @@ CI (`.github/workflows/backend-ci.yml`, `reality-engine-ci.yml`) runs exactly `r
 
 ## Architecture conventions
 
-### Core API (`backend/`) — established by `identity`/`goals`/`decisions`/`simulations`/`memory`, follow for every new bounded context
+### Core API (`backend/`) — established by `identity`/`goals`/`decisions`/`simulations`/`memory`/`billing`, follow for every new bounded context
 
 - **Layering is directional and non-negotiable**: `api/` → `application/` (use cases) → `domain/` (entities + abstract repository interfaces, zero framework imports) ← `infrastructure/` (SQLAlchemy models + concrete repositories implementing the domain interfaces). Use cases depend on the domain interfaces, never on `infrastructure` directly (Dependency Inversion). See `backend/README.md` for the exact file layout to copy for the next bounded context.
 - **Repository pattern everywhere.** Every persistence access goes through an ABC defined in `domain/repositories.py`; production code gets `SqlAlchemy*Repository`, tests get either an in-memory fake (unit tests) or the real repository against SQLite (integration tests) — never mock the ORM directly.
@@ -101,6 +104,7 @@ CI (`.github/workflows/backend-ci.yml`, `reality-engine-ci.yml`) runs exactly `r
 - **Cross-bounded-context orchestration belongs in one use case, not scattered.** `RunSimulationUseCase` is the only place that reads from `decisions` and `goals` and writes to `simulations` (and, when Reality Engine returned a memory summary, to `memory`) in the same operation; `ReportDecisionOutcomeUseCase` is the equivalent for closing the loop — it reads `decisions`+`simulations`, calls Reality Engine's `/v1/calibrate`, and writes to both `simulations` (the new `DecisionOutcome`) and `memory` (the `UserBiasProfile` update). Each bounded context still only exposes its own repository interface, so the coupling is visible at the use case's constructor, not hidden inside a repository.
 - **Domain aggregates that update incrementally expose a `with_*` method that computes the new state, not a setter.** `UserBiasProfile.with_bias_observation()` folds a new observation into an existing bias via weighted moving average (never overwrites), same shape as `Decision.with_status()` — the entity computes its own next state, the use case just persists it.
 - **A vector column stored as portable JSON instead of a real vector type must document its migration point in the repository, not just in a comment somewhere else.** `memory/infrastructure/repository.py`'s docstring is the single place that says when/how `find_similar`'s linear scan becomes a real pgvector query — anyone touching that file sees the constraint immediately.
+- **A replica of an external system's state is only ever written by the one handler that consumes that system's own change events — never by request-driven use cases.** `Subscription` (`billing/domain/entities.py`) mirrors Stripe's own subscription state; only `HandleStripeWebhookEventUseCase` calls `SubscriptionRepository.upsert()`. `CreateCheckoutSessionUseCase`/`CreatePortalSessionUseCase` only ever read it. Webhook processing is idempotent by construction: `StripeEventRepository.exists(stripe_event_id)` is checked before applying any effect, so Stripe's own retry-until-2xx behavior can never double-apply a webhook.
 
 ### Reality Engine (`reality_engine/`) — established by the AI Gateway + all 13 agents
 

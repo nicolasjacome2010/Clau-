@@ -11,6 +11,11 @@
 # safety-classification tier has zero providers and it fails safe on every
 # request (see reality_engine/README.md) — set VAROS_RE_OPENAI_API_KEY in a
 # .env file or your shell to actually exercise the pipeline end to end.
+#
+# core-api has no Stripe keys set here either: without them, billing
+# checkout/portal endpoints return 503 and every webhook is rejected with
+# 400 — set VAROS_STRIPE_SECRET_KEY / VAROS_STRIPE_WEBHOOK_SECRET to
+# exercise billing/ end to end (see backend/.env.example).
 
 services:
   postgres:
@@ -57,6 +62,8 @@ services:
       VAROS_DATABASE_URL: postgresql+asyncpg://varos:varos@postgres:5432/varos
       VAROS_ENVIRONMENT: development
       VAROS_REALITY_ENGINE_BASE_URL: http://reality-engine:8100
+      VAROS_STRIPE_SECRET_KEY: ${VAROS_STRIPE_SECRET_KEY:-}
+      VAROS_STRIPE_WEBHOOK_SECRET: ${VAROS_STRIPE_WEBHOOK_SECRET:-}
     depends_on:
       postgres:
         condition: service_healthy

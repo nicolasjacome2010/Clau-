@@ -9,6 +9,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from core_api.auth.token_verifier import SupabaseJWTVerifier
+from core_api.billing.api.router import router as billing_router
+from core_api.billing.infrastructure.stripe_client import StripeApiClient
 from core_api.config import Settings, get_settings
 from core_api.crypto import FernetFieldEncryptor
 from core_api.db import create_engine, create_session_factory
@@ -37,6 +39,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
         app.state.field_encryptor = FernetFieldEncryptor(settings.field_encryption_key)
         app.state.reality_engine_client = HttpRealityEngineClient(settings.reality_engine_base_url)
+        app.state.stripe_client = StripeApiClient(
+            settings.stripe_secret_key, settings.stripe_webhook_secret
+        )
 
         yield
 
@@ -57,6 +62,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(decisions_router)
     app.include_router(simulations_router)
     app.include_router(memory_router)
+    app.include_router(billing_router)
 
     @app.get("/healthz", tags=["ops"])
     async def healthz() -> dict[str, str]:

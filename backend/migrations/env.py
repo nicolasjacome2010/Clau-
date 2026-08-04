@@ -14,6 +14,7 @@ from alembic import context
 from sqlalchemy import Connection
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from core_api.billing.infrastructure import models as billing_models  # noqa: F401
 from core_api.config import get_settings
 from core_api.db import Base, create_engine
 from core_api.decisions.infrastructure import models as decisions_models  # noqa: F401

@@ -31,6 +31,14 @@ class Settings(BaseSettings):
     # reality_engine/README.md). Default matches its Dockerfile's EXPOSEd port.
     reality_engine_base_url: str = "http://localhost:8100"
 
+    # DEV-ONLY DEFAULTS. Production must override both via real Stripe
+    # secrets (AWS Secrets Manager, docs/ARCHITECTURE.md §11) — a webhook
+    # secret of "" makes `stripe.Webhook.construct_event` reject every
+    # request, which is the correct fail-closed behavior for an
+    # unconfigured deployment (see billing/infrastructure/stripe_client.py).
+    stripe_secret_key: str = ""
+    stripe_webhook_secret: str = ""
+
 
 @lru_cache
 def get_settings() -> Settings:
