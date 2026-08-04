@@ -1,0 +1,110 @@
+import 'dart:async';
+
+import 'package:var_os_app/features/simulations/domain/simulation.dart';
+import 'package:var_os_app/features/simulations/domain/simulations_repository.dart';
+
+class FakeSimulationsRepository implements SimulationsRepository {
+  FakeSimulationsRepository({
+    List<Simulation>? simulations,
+    this.listError,
+    this.runError,
+    this.ranSimulation,
+    this.runGate,
+  }) : simulations = simulations ?? const [];
+
+  final List<Simulation> simulations;
+  final SimulationsRepositoryError? listError;
+  final SimulationsRepositoryError? runError;
+
+  /// What `runSimulation` returns on success. Left `null` when a test only
+  /// cares about the failure path.
+  final Simulation? ranSimulation;
+
+  /// Held open until the test completes it, so the in-flight state is
+  /// observable. Without it the fake resolves on the first microtask and the
+  /// running indicator never gets a frame — which would make "we show an
+  /// honest wait while `/v1/simulate` blocks for 15-30s" untestable.
+  final Completer<void>? runGate;
+
+  /// Every decision id `runSimulation` was called with, in order.
+  final List<String> runCalls = [];
+
+  @override
+  Future<List<Simulation>> listForDecision(String decisionId) async {
+    if (listError != null) throw listError!;
+    return simulations.where((s) => s.decisionId == decisionId).toList();
+  }
+
+  @override
+  Future<Simulation> runSimulation(String decisionId) async {
+    runCalls.add(decisionId);
+    if (runGate != null) await runGate!.future;
+    if (runError != null) throw runError!;
+    return ranSimulation ??
+        testSimulation(
+          id: 'ran',
+          decisionId: decisionId,
+          scenarios: [
+            testScenario(id: 's1', title: 'Escenario nuevo', rank: 1),
+          ],
+        );
+  }
+}
+
+/// Builds a `Simulation` with defaults for everything a given test isn't
+/// about — same idea as `testDecision` in `../decisions/fakes.dart`.
+Simulation testSimulation({
+  String id = 'sim-1',
+  String decisionId = 'd1',
+  String status = 'completed',
+  bool safeToProceed = true,
+  String recommendedAction = 'proceed',
+  List<SimulationScenario>? scenarios,
+  String? synthesisText,
+  String? reflectiveQuestion,
+  DateTime? startedAt,
+  DateTime? completedAt,
+}) {
+  return Simulation(
+    id: id,
+    decisionId: decisionId,
+    status: status,
+    safetyGate: SafetyGateResult(
+      safeToProceed: safeToProceed,
+      recommendedAction: recommendedAction,
+    ),
+    scenarios: scenarios ?? const [],
+    synthesisText: synthesisText,
+    reflectiveQuestion: reflectiveQuestion,
+    startedAt: startedAt ?? DateTime.utc(2026, 1, 1),
+    completedAt: completedAt,
+  );
+}
+
+SimulationScenario testScenario({
+  required String id,
+  required String title,
+  required int rank,
+  String narrative = 'Lo que podría pasar en este escenario.',
+  List<String> assumptions = const [],
+  double relativeProbability = 40,
+  int timeHorizonMonths = 12,
+  List<GoalAlignment> goalAlignmentScores = const [],
+  double riskScore = 30,
+  double reversibilityScore = 70,
+  double finalScore = 60,
+}) {
+  return SimulationScenario(
+    id: id,
+    title: title,
+    narrative: narrative,
+    assumptions: assumptions,
+    relativeProbability: relativeProbability,
+    timeHorizonMonths: timeHorizonMonths,
+    goalAlignmentScores: goalAlignmentScores,
+    riskScore: riskScore,
+    reversibilityScore: reversibilityScore,
+    finalScore: finalScore,
+    rank: rank,
+  );
+}

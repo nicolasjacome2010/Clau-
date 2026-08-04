@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../../../core/routing/app_routes.dart';
 import '../../../../design_system/var_colors.dart';
 import '../../../../design_system/var_spacing.dart';
 import '../../../../design_system/var_typography.dart';
+import '../../domain/decision_ref.dart';
 import '../../domain/decision_summary.dart';
 import '../controllers/decisions_controller.dart';
 import 'decision_status_style.dart';
@@ -115,43 +118,57 @@ class _DecisionListTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Semantics(
+      button: true,
       label: '${decision.title}, ${decisionStatusLabel(decision.status)}',
       child: Container(
         margin: const EdgeInsets.only(bottom: VarSpacing.sm),
-        padding: const EdgeInsets.symmetric(
-          horizontal: VarSpacing.md,
-          vertical: VarSpacing.sm,
-        ),
-        decoration: BoxDecoration(
+        // Surface color on `Material` so the ripple lands on the tile itself —
+        // same reasoning as `ActiveDecisionCard`.
+        child: Material(
           color: VarColors.bgSurfaceDark,
           borderRadius: BorderRadius.circular(12),
-          border: Border(
-            left: BorderSide(
-              color: decisionStatusColor(decision.status),
-              width: 3,
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: () => context.push(
+              AppRoutes.decisionResult,
+              extra: DecisionRef(id: decision.id, title: decision.title),
             ),
-          ),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                decision.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: VarTypography.body(
-                  14,
-                  VarColors.textPrimaryDark,
-                  weight: FontWeight.w600,
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: VarSpacing.md,
+                vertical: VarSpacing.sm,
+              ),
+              decoration: BoxDecoration(
+                border: Border(
+                  left: BorderSide(
+                    color: decisionStatusColor(decision.status),
+                    width: 3,
+                  ),
                 ),
               ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      decision.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: VarTypography.body(
+                        14,
+                        VarColors.textPrimaryDark,
+                        weight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: VarSpacing.sm),
+                  Text(
+                    decisionStatusLabel(decision.status),
+                    style: VarTypography.body(12, VarColors.textSecondaryDark),
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(width: VarSpacing.sm),
-            Text(
-              decisionStatusLabel(decision.status),
-              style: VarTypography.body(12, VarColors.textSecondaryDark),
-            ),
-          ],
+          ),
         ),
       ),
     );

@@ -1,6 +1,6 @@
 # VAR OS — App (Flutter)
 
-Cliente Flutter (docs/ARCHITECTURE.md §3, docs/UX_DESIGN.md). **Estado actual: fundación + Pantallas 1, 2, 3, 4, 5, 10, 12 y 13 implementadas end to end (Splash → Onboarding → Auth → Home → Clarificación, + Mis Decisiones, Memoria y Perfil de Objetivos en el nav shell), y la creación de decisiones ya funciona contra el backend real.** Los 4 destinos del nav shell son reales: ya no queda ningún placeholder. El resto de `docs/UX_DESIGN.md` §2 (Simulación en vivo, Resultados, Síntesis, Cierre de ciclo, Suscripción, Ajustes) es diseño, no código todavía — no asumas que existen solo porque están documentadas (misma regla que `CLAUDE.md` aplica al resto del repo).
+Cliente Flutter (docs/ARCHITECTURE.md §3, docs/UX_DESIGN.md). **Estado actual: fundación + Pantallas 1, 2, 3, 4, 5, 7, 9, 10, 12 y 13 implementadas end to end (Splash → Onboarding → Auth → Home → Clarificación → Resultados/Síntesis, + Mis Decisiones, Memoria y Perfil de Objetivos en el nav shell), y tanto la creación de decisiones como la simulación funcionan contra el backend real.** Los 4 destinos del nav shell son reales: ya no queda ningún placeholder. El resto de `docs/UX_DESIGN.md` §2 (Simulación en vivo, Comparación, Cierre de ciclo, Suscripción, Ajustes) es diseño, no código todavía — no asumas que existen solo porque están documentadas (misma regla que `CLAUDE.md` aplica al resto del repo).
 
 ## Estructura
 
@@ -59,6 +59,17 @@ lib/
         controllers/bias_profile_controller.dart # AsyncNotifier, refresh()
         widgets/                  # calibration_gauge.dart, bias_pattern_card.dart,
                                    # memory_tab_content.dart (botones GDPR incl.)
+    simulations/               # Pantallas 7 + 9 — escenarios y síntesis, REAL. Se abre tocando
+                               # cualquier decisión (Home o Mis Decisiones)
+      domain/                    # Simulation, SimulationScenario, GoalAlignment,
+                                 # SafetyGateResult (requiresReferral), SimulationsRepository
+      data/api_simulations_repository.dart # adaptador real: GET/POST
+                                            # /v1/decisions/{id}/simulations (timeout largo)
+      presentation/
+        controllers/decision_simulation_controller.dart # AsyncNotifier .family por decisión
+        widgets/                  # score_bar.dart (0-100 con polaridad), scenario_card.dart,
+                                   # synthesis_section.dart, safety_referral.dart,
+                                   # running_indicator.dart
     shared/presentation/       # widgets que ninguna feature es dueña: step_indicator.dart
                                # (Onboarding y Clarificación)
 test/
@@ -79,6 +90,9 @@ test/
 - **El ícono de micrófono sigue mostrando "próximo módulo"** — necesita permisos de micrófono por plataforma y wiring de STT que este incremento no construye.
 - **Quitar un objetivo es irreversible desde el cliente.** `GET /v1/goals` solo devuelve objetivos activos (`ListActiveGoalsUseCase`, sin parámetro `include_inactive`), así que un objetivo desactivado desaparece y nada puede volver a listarlo para reactivarlo. Por eso la acción se llama "Quitar" — lo que el usuario realmente experimenta — en vez de un toggle que suene reversible. Reactivar necesita un cambio de backend, no un rodeo en el cliente. Ver el docstring de `GoalsRepository`.
 - **Mis Decisiones (Pantalla 10) no muestra el indicador ">60 días sin cerrar el ciclo".** El wireframe lo pide sobre decisiones completadas, pero ningún endpoint del backend expone hoy si una decisión ya tiene un `DecisionOutcome` sin hacer una llamada por decisión (`POST /v1/decisions/{id}/outcome` solo *reporta* uno — no hay un GET equivalente para verificar antes). Se documenta como ausente en vez de simularlo con una llamada N+1. Ver el docstring de `MyDecisionsTabContent`.
+- **Resultados (Pantallas 7 + 9) muestra una espera indeterminada, no la Pantalla 6.** `POST /v1/decisions/{id}/simulations` bloquea durante todo el pipeline (15-30s) y no hay canal de progreso, así que la pantalla muestra un spinner honesto — y pasados ~15s el micro-copy tranquilizador que el spec pide — en vez de una barra de progreso sintética que fingiría saber en qué etapa va. `ApiSimulationsRepository` sube el timeout a 90s para esa llamada, porque el default de 10s abortaría una corrida perfectamente sana.
+- **Un `halt_and_refer` del Safety Gate reemplaza *todo* el resultado.** `SafetyReferral` se comprueba antes que cualquier otra cosa: aunque el payload traiga escenarios y síntesis, no se renderiza ninguno, y no hay escape del tipo "ver de todos modos" (docs/PRD.md §18: "se niega y redirige"). Un `safe_to_proceed: false` sin `recommended_action` explícito también refiere — falla hacia lo conservador, igual que `SafetyGateAgent` en el Reality Engine. A la inversa, un `safety_gate_result` vacío (una corrida que falló *antes* de llegar al Agente 0) **no** se lee como crisis: se reporta como fallo, que es lo que es.
+- **`SafetyReferral` no hardcodea números de crisis, a propósito.** Los recursos son específicos por país e idioma, y un número equivocado o muerto mostrado a alguien en crisis es peor que ninguno. La copy apunta a ayuda profesional en términos generales; una lista real, localizada y revisada por los profesionales que docs/PRD.md §18 ya exige antes de lanzar es un entregable requerido, no un pulido opcional. Ver el docstring del widget.
 - **Memoria (Pantalla 12) tiene los botones "Exportar mis datos"/"Borrar todo mi historial" visibles pero sin backend detrás.** El spec es explícito en que deben ser visibles (no escondidos en Ajustes), pero el backend no tiene ningún endpoint de exportación/borrado de datos todavía — tocarlos muestra un aviso "llega en un próximo módulo" en vez de fingir la acción. `bias.bias` se renderiza tal cual lo escribió el LLM (docs/REALITY_ENGINE.md Agente 5/12: es texto libre en español, no un código), así que no hay tabla de traducción cliente-side que mantener sincronizada.
 
 ## Desarrollo local

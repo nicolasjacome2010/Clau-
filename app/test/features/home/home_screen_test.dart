@@ -4,15 +4,19 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:var_os_app/core/routing/app_routes.dart';
 import 'package:var_os_app/features/clarification/presentation/screens/clarification_screen.dart';
+import 'package:var_os_app/features/decisions/domain/decision_ref.dart';
 import 'package:var_os_app/features/decisions/domain/decisions_repository.dart';
 import 'package:var_os_app/features/decisions/presentation/controllers/decisions_controller.dart';
 import 'package:var_os_app/features/goals/presentation/controllers/goals_controller.dart';
 import 'package:var_os_app/features/home/presentation/screens/home_screen.dart';
 import 'package:var_os_app/features/memory/presentation/controllers/bias_profile_controller.dart';
+import 'package:var_os_app/features/simulations/presentation/controllers/decision_simulation_controller.dart';
+import 'package:var_os_app/features/simulations/presentation/screens/decision_result_screen.dart';
 
 import '../decisions/fakes.dart';
 import '../goals/fakes.dart';
 import '../memory/fakes.dart';
+import '../simulations/fakes.dart';
 
 void main() {
   Future<void> pumpHome(
@@ -20,7 +24,8 @@ void main() {
     required DecisionsRepository repository,
   }) async {
     // A real router, not a bare `MaterialApp`: Home's capture field pushes
-    // Clarificación, so navigation is part of what these tests exercise.
+    // Clarificación and its decision cards push the result screen, so
+    // navigation is part of what these tests exercise.
     final router = GoRouter(
       initialLocation: AppRoutes.home,
       routes: [
@@ -33,6 +38,16 @@ void main() {
           builder: (context, state) =>
               ClarificationScreen(rawInput: state.extra! as String),
         ),
+        GoRoute(
+          path: AppRoutes.decisionResult,
+          builder: (context, state) {
+            final decision = state.extra! as DecisionRef;
+            return DecisionResultScreen(
+              decisionId: decision.id,
+              title: decision.title,
+            );
+          },
+        ),
       ],
     );
 
@@ -42,6 +57,9 @@ void main() {
           decisionsRepositoryProvider.overrideWithValue(repository),
           memoryRepositoryProvider.overrideWithValue(FakeMemoryRepository()),
           goalsRepositoryProvider.overrideWithValue(FakeGoalsRepository()),
+          simulationsRepositoryProvider.overrideWithValue(
+            FakeSimulationsRepository(),
+          ),
         ],
         child: MaterialApp.router(routerConfig: router),
       ),
@@ -196,6 +214,32 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(ClarificationScreen), findsNothing);
+  });
+
+  testWidgets('tapping an active decision opens its result screen', (
+    tester,
+  ) async {
+    await pumpHome(
+      tester,
+      repository: FakeDecisionsRepository(
+        decisions: [
+          testDecision(
+            id: 'd1',
+            title: 'Oferta de trabajo Z',
+            status: 'simulating',
+          ),
+        ],
+      ),
+    );
+
+    await tester.tap(find.text('Oferta de trabajo Z'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(DecisionResultScreen), findsOneWidget);
+    expect(
+      find.text('Esta decisión todavía no se ha simulado.'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('uses a bottom NavigationBar on mobile widths', (tester) async {

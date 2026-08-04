@@ -1,10 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
+import 'package:var_os_app/core/routing/app_routes.dart';
+import 'package:var_os_app/features/decisions/domain/decision_ref.dart';
 import 'package:var_os_app/features/decisions/domain/decisions_repository.dart';
 import 'package:var_os_app/features/decisions/presentation/controllers/decisions_controller.dart';
 import 'package:var_os_app/features/decisions/presentation/widgets/my_decisions_tab_content.dart';
+import 'package:var_os_app/features/simulations/presentation/controllers/decision_simulation_controller.dart';
+import 'package:var_os_app/features/simulations/presentation/screens/decision_result_screen.dart';
 
+import '../simulations/fakes.dart';
 import 'fakes.dart';
 
 void main() {
@@ -12,10 +18,38 @@ void main() {
     WidgetTester tester, {
     required DecisionsRepository repository,
   }) async {
+    // A real router rather than a bare `MaterialApp`: each tile pushes the
+    // decision's result screen, so navigation is part of what's under test.
+    final router = GoRouter(
+      initialLocation: AppRoutes.home,
+      routes: [
+        GoRoute(
+          path: AppRoutes.home,
+          builder: (context, state) =>
+              const Scaffold(body: MyDecisionsTabContent()),
+        ),
+        GoRoute(
+          path: AppRoutes.decisionResult,
+          builder: (context, state) {
+            final decision = state.extra! as DecisionRef;
+            return DecisionResultScreen(
+              decisionId: decision.id,
+              title: decision.title,
+            );
+          },
+        ),
+      ],
+    );
+
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [decisionsRepositoryProvider.overrideWithValue(repository)],
-        child: const MaterialApp(home: Scaffold(body: MyDecisionsTabContent())),
+        overrides: [
+          decisionsRepositoryProvider.overrideWithValue(repository),
+          simulationsRepositoryProvider.overrideWithValue(
+            FakeSimulationsRepository(),
+          ),
+        ],
+        child: MaterialApp.router(routerConfig: router),
       ),
     );
     await tester.pumpAndSettle();
@@ -98,6 +132,22 @@ void main() {
       expect(find.text('Aún no tienes decisiones.'), findsOneWidget);
     },
   );
+
+  testWidgets('tapping a decision opens its result screen', (tester) async {
+    await pumpTab(
+      tester,
+      repository: FakeDecisionsRepository(
+        decisions: [
+          testDecision(id: 'd1', title: 'Oferta de trabajo Z', status: 'draft'),
+        ],
+      ),
+    );
+
+    await tester.tap(find.text('Oferta de trabajo Z'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(DecisionResultScreen), findsOneWidget);
+  });
 
   testWidgets('shows a retry affordance on failure', (tester) async {
     await pumpTab(

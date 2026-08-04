@@ -1,0 +1,217 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:dio/dio.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:var_os_app/features/simulations/data/api_simulations_repository.dart';
+import 'package:var_os_app/features/simulations/domain/simulations_repository.dart';
+
+/// Same `httpx.MockTransport` equivalent the other repository tests use: no
+/// real network, so this exercises our parsing, not connectivity.
+class _FakeHttpClientAdapter implements HttpClientAdapter {
+  _FakeHttpClientAdapter.json(this._body) : _throws = null;
+  _FakeHttpClientAdapter.throwing(Object error) : _body = null, _throws = error;
+
+  final String? _body;
+  final Object? _throws;
+
+  /// The options of every request that reached the adapter, so a test can
+  /// assert on what was actually sent (the long run timeout, notably).
+  final List<RequestOptions> requests = [];
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    requests.add(options);
+    if (_throws != null) throw _throws;
+    return ResponseBody.fromString(
+      _body!,
+      200,
+      headers: {
+        Headers.contentTypeHeader: [Headers.jsonContentType],
+      },
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+Dio _dioWith(HttpClientAdapter adapter) {
+  final dio = Dio(BaseOptions(baseUrl: 'http://test'));
+  dio.httpClientAdapter = adapter;
+  return dio;
+}
+
+Map<String, Object?> _simulationJson({
+  Map<String, Object?>? safetyGate,
+  List<Object?>? scenarios,
+  String status = 'completed',
+}) {
+  return {
+    'id': 'sim-1',
+    'decision_id': 'd1',
+    'status': status,
+    'safety_gate_result':
+        safetyGate ??
+        {'safe_to_proceed': true, 'recommended_action': 'proceed'},
+    'scenarios': scenarios ?? <Object?>[],
+    'synthesis_text': 'Ambos caminos son viables.',
+    'reflective_question': '¿Qué te importa más?',
+    'started_at': '2026-01-01T00:00:00Z',
+    'completed_at': '2026-01-01T00:00:30Z',
+  };
+}
+
+Map<String, Object?> _scenarioJson() {
+  return {
+    'id': 's1',
+    'title': 'Aceptar la oferta',
+    'narrative': 'Te mudás y el equipo crece.',
+    'assumptions': ['El equipo se mantiene estable'],
+    'relative_probability': 45.5,
+    'time_horizon_months': 12,
+    'goal_alignment_scores': [
+      {
+        'goal': 'Estabilidad financiera',
+        'score': 80,
+        'justification': 'Sueldo mayor',
+      },
+    ],
+    'risk_score': 30,
+    'reversibility_score': 70,
+    'final_score': 64.2,
+    'rank': 1,
+  };
+}
+
+void main() {
+  test('parses a well-formed simulations list', () async {
+    final dio = _dioWith(
+      _FakeHttpClientAdapter.json(
+        jsonEncode([
+          _simulationJson(scenarios: [_scenarioJson()]),
+        ]),
+      ),
+    );
+
+    final simulations = await ApiSimulationsRepository(
+      dio,
+    ).listForDecision('d1');
+
+    expect(simulations, hasLength(1));
+    final simulation = simulations.single;
+    expect(simulation.id, 'sim-1');
+    expect(simulation.decisionId, 'd1');
+    expect(simulation.isCompleted, isTrue);
+    expect(simulation.safetyGate.requiresReferral, isFalse);
+    expect(simulation.synthesisText, 'Ambos caminos son viables.');
+    expect(simulation.completedAt, DateTime.parse('2026-01-01T00:00:30Z'));
+
+    final scenario = simulation.scenarios.single;
+    expect(scenario.title, 'Aceptar la oferta');
+    expect(scenario.assumptions, ['El equipo se mantiene estable']);
+    expect(scenario.relativeProbability, 45.5);
+    expect(scenario.riskScore, 30);
+    expect(scenario.isTopRanked, isTrue);
+    expect(scenario.goalAlignmentScores.single.goal, 'Estabilidad financiera');
+    expect(scenario.goalAlignmentScores.single.score, 80);
+  });
+
+  test('reads a halt out of the safety gate result', () async {
+    final dio = _dioWith(
+      _FakeHttpClientAdapter.json(
+        jsonEncode([
+          _simulationJson(
+            safetyGate: {
+              'safe_to_proceed': false,
+              'recommended_action': 'halt_and_refer',
+            },
+          ),
+        ]),
+      ),
+    );
+
+    final simulations = await ApiSimulationsRepository(
+      dio,
+    ).listForDecision('d1');
+
+    expect(simulations.single.safetyGate.requiresReferral, isTrue);
+  });
+
+  test('an absent safety gate result is not read as a halt', () async {
+    // A run that failed before reaching Agente 0 carries an empty map. That
+    // is a failure, not a crisis — misreporting it would show a referral to
+    // someone who only hit a network error.
+    final dio = _dioWith(
+      _FakeHttpClientAdapter.json(
+        jsonEncode([_simulationJson(safetyGate: const {}, status: 'failed')]),
+      ),
+    );
+
+    final simulations = await ApiSimulationsRepository(
+      dio,
+    ).listForDecision('d1');
+
+    expect(simulations.single.safetyGate.requiresReferral, isFalse);
+    expect(simulations.single.isFailed, isTrue);
+  });
+
+  test('runSimulation posts and parses the returned simulation', () async {
+    final adapter = _FakeHttpClientAdapter.json(
+      jsonEncode(_simulationJson(scenarios: [_scenarioJson()])),
+    );
+    final dio = _dioWith(adapter);
+
+    final simulation = await ApiSimulationsRepository(dio).runSimulation('d1');
+
+    expect(simulation.id, 'sim-1');
+    expect(simulation.scenarios, hasLength(1));
+    expect(adapter.requests.single.method, 'POST');
+    expect(adapter.requests.single.path, '/v1/decisions/d1/simulations');
+  });
+
+  test('runSimulation allows far longer than the default timeout', () async {
+    // Regression guard: the app-wide 10s default would abort a healthy
+    // 15-30s pipeline run.
+    final adapter = _FakeHttpClientAdapter.json(jsonEncode(_simulationJson()));
+    final dio = _dioWith(adapter);
+
+    await ApiSimulationsRepository(dio).runSimulation('d1');
+
+    expect(
+      adapter.requests.single.receiveTimeout,
+      greaterThanOrEqualTo(const Duration(seconds: 60)),
+    );
+  });
+
+  test('wraps a network failure in SimulationsRepositoryError', () async {
+    final dio = _dioWith(
+      _FakeHttpClientAdapter.throwing(
+        DioException(
+          requestOptions: RequestOptions(path: '/v1/decisions/d1/simulations'),
+          message: 'boom',
+        ),
+      ),
+    );
+
+    expect(
+      ApiSimulationsRepository(dio).listForDecision('d1'),
+      throwsA(isA<SimulationsRepositoryError>()),
+    );
+  });
+
+  test('rejects a non-list response shape', () async {
+    final dio = _dioWith(
+      _FakeHttpClientAdapter.json(jsonEncode({'not': 'a list'})),
+    );
+
+    expect(
+      ApiSimulationsRepository(dio).listForDecision('d1'),
+      throwsA(isA<SimulationsRepositoryError>()),
+    );
+  });
+}

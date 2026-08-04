@@ -8,4 +8,7 @@ abstract final class AppRoutes {
 
   /// Pushed on top of Home with the captured decision text as `extra`.
   static const clarification = '/clarification';
+
+  /// Pushed with a `DecisionRef` (id + title) as `extra`.
+  static const decisionResult = '/decision-result';
 }
