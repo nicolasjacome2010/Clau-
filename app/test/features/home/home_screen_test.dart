@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
+import 'package:var_os_app/core/routing/app_routes.dart';
+import 'package:var_os_app/features/clarification/presentation/screens/clarification_screen.dart';
 import 'package:var_os_app/features/decisions/domain/decisions_repository.dart';
 import 'package:var_os_app/features/decisions/presentation/controllers/decisions_controller.dart';
 import 'package:var_os_app/features/home/presentation/screens/home_screen.dart';
@@ -14,13 +17,30 @@ void main() {
     WidgetTester tester, {
     required DecisionsRepository repository,
   }) async {
+    // A real router, not a bare `MaterialApp`: Home's capture field pushes
+    // Clarificación, so navigation is part of what these tests exercise.
+    final router = GoRouter(
+      initialLocation: AppRoutes.home,
+      routes: [
+        GoRoute(
+          path: AppRoutes.home,
+          builder: (context, state) => const HomeScreen(),
+        ),
+        GoRoute(
+          path: AppRoutes.clarification,
+          builder: (context, state) =>
+              ClarificationScreen(rawInput: state.extra! as String),
+        ),
+      ],
+    );
+
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           decisionsRepositoryProvider.overrideWithValue(repository),
           memoryRepositoryProvider.overrideWithValue(FakeMemoryRepository()),
         ],
-        child: const MaterialApp(home: HomeScreen()),
+        child: MaterialApp.router(routerConfig: router),
       ),
     );
     await tester.pumpAndSettle();
@@ -141,19 +161,27 @@ void main() {
     );
   });
 
-  testWidgets('submitting the decision input shows a coming-soon notice', (
+  testWidgets('submitting the decision input opens Clarificación', (
     tester,
   ) async {
     await pumpHome(tester, repository: FakeDecisionsRepository());
 
     await tester.enterText(find.byType(TextField), '¿Debo renunciar?');
     await tester.testTextInput.receiveAction(TextInputAction.done);
-    await tester.pump();
+    await tester.pumpAndSettle();
 
-    expect(
-      find.text('Guardar una decisión llega en un próximo módulo.'),
-      findsOneWidget,
-    );
+    expect(find.byType(ClarificationScreen), findsOneWidget);
+    expect(find.text('¿De qué área es esta decisión?'), findsOneWidget);
+  });
+
+  testWidgets('submitting an empty input does nothing', (tester) async {
+    await pumpHome(tester, repository: FakeDecisionsRepository());
+
+    await tester.enterText(find.byType(TextField), '   ');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ClarificationScreen), findsNothing);
   });
 
   testWidgets('uses a bottom NavigationBar on mobile widths', (tester) async {

@@ -6,10 +6,10 @@ import '../../../../core/routing/app_routes.dart';
 import '../../../../design_system/var_colors.dart';
 import '../../../../design_system/var_motion.dart';
 import '../../../../design_system/var_spacing.dart';
+import '../../../shared/presentation/step_indicator.dart';
 import '../controllers/onboarding_controller.dart';
 import '../widgets/goal_selection_step.dart';
 import '../widgets/intro_slide.dart';
-import '../widgets/step_indicator.dart';
 
 /// Pantalla 2 — Onboarding (docs/UX_DESIGN.md §2): 3 steps, the last of
 /// which captures initial life goals. Transition style is fade + slight

@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 
-import '../../../../design_system/var_colors.dart';
-import '../../../../design_system/var_motion.dart';
+import '../../../design_system/var_colors.dart';
+import '../../../design_system/var_motion.dart';
 
-/// The "● ○ ○" progress dots (docs/UX_DESIGN.md, Pantalla 2).
+/// The "● ○ ○" progress dots, shared by every multi-step flow — Onboarding
+/// (docs/UX_DESIGN.md Pantalla 2) and Clarificación (Pantalla 5), which
+/// both render the same affordance. Lives in `shared/` rather than inside
+/// either feature precisely because neither owns it.
 class StepIndicator extends StatelessWidget {
   const StepIndicator({
     super.key,

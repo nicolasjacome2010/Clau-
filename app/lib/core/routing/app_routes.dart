@@ -5,4 +5,7 @@ abstract final class AppRoutes {
   static const onboarding = '/onboarding';
   static const auth = '/auth';
   static const home = '/home';
+
+  /// Pushed on top of Home with the captured decision text as `extra`.
+  static const clarification = '/clarification';
 }

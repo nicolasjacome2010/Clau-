@@ -49,4 +49,30 @@ class ApiDecisionsRepository implements DecisionsRepository {
       );
     }).toList();
   }
+
+  @override
+  Future<String> createDecision({
+    required String rawInput,
+    required String vertical,
+  }) async {
+    final Response<dynamic> response;
+    try {
+      response = await _dio.post<dynamic>(
+        '/v1/decisions',
+        data: {'raw_input': rawInput, 'vertical': vertical},
+      );
+    } on DioException catch (exc) {
+      throw DecisionsRepositoryError(
+        'Failed to create decision: ${exc.message}',
+      );
+    }
+
+    final data = response.data;
+    if (data is! Map || data['id'] is! String) {
+      throw DecisionsRepositoryError(
+        'Unexpected POST /v1/decisions response shape',
+      );
+    }
+    return data['id'] as String;
+  }
 }

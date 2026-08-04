@@ -1,6 +1,6 @@
 # VAR OS — App (Flutter)
 
-Cliente Flutter (docs/ARCHITECTURE.md §3, docs/UX_DESIGN.md). **Estado actual: fundación + Pantallas 1, 2, 3, 4, 10 y 12 (Splash → Onboarding → Auth → Home → Mis Decisiones → Memoria) implementadas end to end.** El resto de `docs/UX_DESIGN.md` §2 (Clarificación, Simulación en vivo, Resultados, Perfil de Objetivos, Suscripción, Ajustes) es diseño, no código todavía — no asumas que existen solo porque están documentadas (misma regla que `CLAUDE.md` aplica al resto del repo).
+Cliente Flutter (docs/ARCHITECTURE.md §3, docs/UX_DESIGN.md). **Estado actual: fundación + Pantallas 1, 2, 3, 4, 5, 10 y 12 (Splash → Onboarding → Auth → Home → Clarificación → Mis Decisiones → Memoria) implementadas end to end, y la creación de decisiones ya funciona contra el backend real.** El resto de `docs/UX_DESIGN.md` §2 (Simulación en vivo, Resultados, Síntesis, Cierre de ciclo, Perfil de Objetivos, Suscripción, Ajustes) es diseño, no código todavía — no asumas que existen solo porque están documentadas (misma regla que `CLAUDE.md` aplica al resto del repo).
 
 ## Estructura
 
@@ -29,10 +29,14 @@ lib/
       domain/auth_repository.dart # puerto — nunca se llama a Supabase directo desde la UI
       data/local_stub_auth_repository.dart # adaptador interino, ver su docstring
       presentation/
-    decisions/                 # dominio compartido por Home y Mis Decisiones — no vive dentro
-                               # de home/ porque ninguna de las dos pantallas es su dueña
-      domain/                    # DecisionSummary, DecisionsRepository (puerto)
-      data/api_decisions_repository.dart # adaptador real: GET /v1/decisions vía Dio
+    clarification/             # Pantalla 5 — preguntas dirigidas con chips; su primera
+                               # respuesta resuelve el `vertical` y recién ahí se crea la decisión
+      domain/                    # ClarificationQuestion (las 3 preguntas), raw_input_composer.dart
+      presentation/               # ClarificationController (.family sobre el texto capturado)
+    decisions/                 # dominio compartido por Home, Mis Decisiones y Clarificación —
+                               # no vive dentro de home/ porque ninguna pantalla es su dueña
+      domain/                    # DecisionSummary, DecisionVerticalOption, DecisionsRepository
+      data/api_decisions_repository.dart # adaptador real: GET y POST /v1/decisions vía Dio
       presentation/
         controllers/decisions_controller.dart # AsyncNotifier de TODAS las decisiones — un solo
                                                 # fetch compartido por Home ("activas") y Mis
@@ -49,8 +53,9 @@ lib/
         controllers/bias_profile_controller.dart # AsyncNotifier, refresh()
         widgets/                  # calibration_gauge.dart, bias_pattern_card.dart,
                                    # memory_tab_content.dart (botones GDPR incl.)
-    shared/presentation/feature_placeholder_content.dart # contenido de los destinos del nav
-                               # shell que aún no son un módulo real (Perfil)
+    shared/presentation/       # widgets que ninguna feature es dueña: step_indicator.dart
+                               # (Onboarding y Clarificación), feature_placeholder_content.dart
+                               # (destinos del nav shell que aún no son un módulo real — Perfil)
 test/
   design_system/              # tokens
   features/                    # un archivo de test de widget por pantalla/feature
@@ -62,7 +67,10 @@ test/
 - **Riverpod sin `riverpod_generator` todavía.** docs/ARCHITECTURE.md §3 especifica "proveedores generados con `riverpod_generator`". Este primer incremento usa la API clásica (`Notifier`/`NotifierProvider`) para no añadir un paso de `build_runner` a un grafo de providers que todavía es pequeño (2 controllers). Es una desviación documentada, no silenciosa — se adopta codegen cuando el número de features lo justifique.
 - **`auth`/`onboarding` no hablan con un backend real todavía.** `LocalStubAuthRepository` (ver su docstring) es un adaptador interino: acepta cualquier email válido y no hace red. `OnboardingRepository` (puerto) tampoco tiene implementación concreta — capturar objetivos ocurre antes de autenticarse en el flujo real del producto (Pantalla 3 permite "probar antes de registrarse"), así que enviarlos a `POST /v1/goals` del backend solo tiene sentido una vez exista una sesión de Supabase real. Wiring de `SupabaseAuthRepository`/`ApiGoalsRepository` es el siguiente incremento de integración, no una pieza olvidada.
 - **Sin refresh de token automático en `core/network/api_client.dart`.** Depende de la misma sesión de Supabase real que `auth` todavía no tiene. Documentado en el archivo, mismo patrón que el resto del repo (p. ej. `simulations/infrastructure/reality_engine_client.py`'s "no queue yet").
-- **Home (Pantalla 4) SÍ integra con el backend real** — `ApiDecisionsRepository` llama `GET /v1/decisions` de verdad a través del `Dio` compartido; el estado "sin sesión" se ve simplemente como una lista vacía o un error con reintento, no como un mock. Lo que **no** está wireado todavía es crear una decisión: `POST /v1/decisions` exige un `vertical` (career/relationships/finance/business/relocation/conflict) que ni el wireframe de Pantalla 4 ni el de Pantalla 5 (Clarificación) especifican cómo resolver desde un único campo de texto libre — inventar un default silencioso mal-clasificaría datos reales. El campo de entrada de decisión y el ícono de micrófono son reales visualmente pero muestran un aviso "llega en un próximo módulo" al enviarse, en vez de fingir una integración que no existe. Ver el docstring de `DecisionsRepository`.
+- **El `vertical` se resuelve preguntando, no adivinando.** `POST /v1/decisions` exige un `vertical` (career/relationships/finance/business/relocation/conflict) que el campo de texto libre de Home no puede aportar. En vez de inventar un default silencioso que mal-clasificaría datos reales, el input de Home entrega el texto a Pantalla 5 (Clarificación), cuya primera pregunta con chips lo resuelve explícitamente; recién ahí se crea la decisión. Es el mecanismo que el propio spec define para esa pantalla ("opciones de respuesta rápida (chips) siempre que sea posible"), no un rodeo inventado.
+- **Las respuestas no-`vertical` de Clarificación se anexan a `raw_input`.** El backend solo acepta `raw_input` + `vertical`, así que plazo y opciones-en-mente no tienen columna propia — y `raw_input` es justo lo que llega a `/v1/simulate`, así que ese contexto mejora la simulación en vez de perderse. El texto del usuario nunca se reescribe ni se entremezcla: se preserva literal y las respuestas van en un bloque delimitado abajo (`raw_input_composer.dart`). Persistirlas como columnas propias es la forma correcta a largo plazo y el siguiente paso documentado.
+- **Clarificación vuelve a Home al crear la decisión, no sigue a Pantalla 6.** "Simulación en vivo" transmite el progreso del pipeline por un WebSocket que el backend no expone todavía (docs/ARCHITECTURE.md §2.2 lo describe; `simulations` llama al Reality Engine de forma síncrona, sin canal de progreso). La decisión aparece en "Decisiones activas" como `draft`, que es lo honesto sobre dónde está.
+- **El ícono de micrófono sigue mostrando "próximo módulo"** — necesita permisos de micrófono por plataforma y wiring de STT que este incremento no construye.
 - **El nav shell de Home tiene 4 destinos, 3 reales.** Solo `Perfil` sigue renderizando `FeaturePlaceholderContent` — el shell (bottom nav en mobile, `NavigationRail` en tablet+, docs/UX_DESIGN.md §1.6) es completo y responsive ya.
 - **Mis Decisiones (Pantalla 10) no muestra el indicador ">60 días sin cerrar el ciclo".** El wireframe lo pide sobre decisiones completadas, pero ningún endpoint del backend expone hoy si una decisión ya tiene un `DecisionOutcome` sin hacer una llamada por decisión (`POST /v1/decisions/{id}/outcome` solo *reporta* uno — no hay un GET equivalente para verificar antes). Se documenta como ausente en vez de simularlo con una llamada N+1. Ver el docstring de `MyDecisionsTabContent`.
 - **Memoria (Pantalla 12) tiene los botones "Exportar mis datos"/"Borrar todo mi historial" visibles pero sin backend detrás.** El spec es explícito en que deben ser visibles (no escondidos en Ajustes), pero el backend no tiene ningún endpoint de exportación/borrado de datos todavía — tocarlos muestra un aviso "llega en un próximo módulo" en vez de fingir la acción. `bias.bias` se renderiza tal cual lo escribió el LLM (docs/REALITY_ENGINE.md Agente 5/12: es texto libre en español, no un código), así que no hay tabla de traducción cliente-side que mantener sincronizada.

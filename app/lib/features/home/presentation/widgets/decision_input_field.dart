@@ -1,7 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../../../core/routing/app_routes.dart';
 import '../../../../design_system/var_colors.dart';
 import '../../../../design_system/var_spacing.dart';
 import '../../../../design_system/var_typography.dart';
@@ -10,12 +12,12 @@ import '../../../../design_system/var_typography.dart';
 /// viewport en mobile"): a decision-capture field with a rotating
 /// placeholder of anonymized real examples, and a mic affordance.
 ///
-/// Submitting text and real voice capture both surface a "coming soon"
-/// notice rather than silently doing nothing: `POST /v1/decisions` needs a
-/// `vertical` this single free-text field has no way to supply yet (see
-/// `DecisionsRepository`'s docstring), and voice capture needs platform mic
-/// permissions + STT wiring this increment doesn't build. Both are
-/// documented gaps, not missing features nobody noticed.
+/// Submitting hands off to Pantalla 5 (Clarificación) rather than creating
+/// the decision here: `POST /v1/decisions` needs a `vertical` this single
+/// free-text field can't supply, and asking is exactly what that screen is
+/// for. Voice capture still shows a "coming soon" notice — it needs
+/// platform mic permissions + STT wiring this increment doesn't build, a
+/// documented gap rather than a feature nobody noticed.
 class DecisionInputField extends StatefulWidget {
   const DecisionInputField({super.key});
 
@@ -56,6 +58,13 @@ class _DecisionInputFieldState extends State<DecisionInputField> {
     );
   }
 
+  void _startClarification() {
+    final text = _controller.text.trim();
+    if (text.isEmpty) return;
+    _controller.clear();
+    context.push(AppRoutes.clarification, extra: text);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -79,7 +88,7 @@ class _DecisionInputFieldState extends State<DecisionInputField> {
                 hintText: _examples[_exampleIndex],
                 hintStyle: VarTypography.body(16, VarColors.textSecondaryDark),
               ),
-              onSubmitted: (_) => _showComingSoon('Guardar una decisión'),
+              onSubmitted: (_) => _startClarification(),
             ),
           ),
           Semantics(

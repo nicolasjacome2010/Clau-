@@ -3,20 +3,23 @@ import 'decision_summary.dart';
 /// Port over the backend's `decisions` bounded context
 /// (backend/src/core_api/decisions/api/router.py).
 ///
-/// Only `listDecisions` has a concrete adapter today
-/// (`ApiDecisionsRepository`). Home's decision-input field is
-/// intentionally NOT wired to `POST /v1/decisions` yet: that endpoint
-/// requires a `vertical` (career/relationships/finance/business/
-/// relocation/conflict — backend/src/core_api/decisions/domain/
-/// entities.py's `DecisionVertical`), and neither docs/UX_DESIGN.md's
-/// Pantalla 4 wireframe nor Pantalla 5 (Clarificación) specify where that
-/// gets resolved from a single free-text input. Guessing a default
-/// vertical would silently mis-classify most decisions in real backend
-/// data — a real product decision this module doesn't make unilaterally,
-/// same posture `RunSimulationUseCase` takes on the backend when a
-/// decision's next state isn't its call to make alone.
+/// `createDecision` requires a `vertical` because the backend does
+/// (career/relationships/finance/business/relocation/conflict). Home's
+/// free-text input alone can't supply one, so decisions are NOT created
+/// from Home directly: the input hands off to Pantalla 5 (Clarificación),
+/// whose first chip question resolves the vertical explicitly, and only
+/// then is the decision created. That's the spec's own mechanism —
+/// docs/UX_DESIGN.md Pantalla 5 is defined as "opciones de respuesta
+/// rápida (chips) siempre que sea posible" precisely so the system asks
+/// instead of guessing — not an invented workaround.
 abstract class DecisionsRepository {
   Future<List<DecisionSummary>> listDecisions();
+
+  /// Returns the created decision's id.
+  Future<String> createDecision({
+    required String rawInput,
+    required String vertical,
+  });
 }
 
 /// Raised for any failure listing decisions: network error, non-2xx
