@@ -8,20 +8,32 @@ from fastapi.testclient import TestClient
 
 from core_api.auth.token_verifier import StaticTokenVerifier, VerifiedIdentity
 from core_api.dependencies import (
+    get_decision_outcome_repository,
     get_decision_repository,
     get_goal_repository,
+    get_memory_embedding_repository,
     get_reality_engine_client,
     get_simulation_repository,
     get_token_verifier,
+    get_user_bias_profile_repository,
 )
 from core_api.main import create_app
 from core_api.simulations.domain.reality_engine_port import (
+    RealityEngineCalibrationOutcome,
     RealityEngineScenario,
     RealityEngineSimulationOutcome,
 )
 from tests.unit.decisions.fakes import InMemoryDecisionRepository
 from tests.unit.goals.fakes import InMemoryGoalRepository
-from tests.unit.simulations.fakes import FakeRealityEngineClient, InMemorySimulationRepository
+from tests.unit.memory.fakes import (
+    InMemoryMemoryEmbeddingRepository,
+    InMemoryUserBiasProfileRepository,
+)
+from tests.unit.simulations.fakes import (
+    FakeRealityEngineClient,
+    InMemoryDecisionOutcomeRepository,
+    InMemorySimulationRepository,
+)
 
 AUTH = {"Authorization": "Bearer valid-token"}
 
@@ -51,13 +63,30 @@ def _safe_outcome() -> RealityEngineSimulationOutcome:
 
 
 @pytest.fixture
-def client() -> Iterator[TestClient]:
+def reality_engine() -> FakeRealityEngineClient:
+    return FakeRealityEngineClient(
+        responses=[_safe_outcome(), _safe_outcome(), _safe_outcome()],
+        calibrate_responses=[
+            RealityEngineCalibrationOutcome(
+                closest_scenario_id="a",
+                calibration_delta=15.0,
+                system_errors_identified=["overconfidence"],
+                user_bias_profile_update={"optimism_bias": 0.7},
+            )
+        ],
+    )
+
+
+@pytest.fixture
+def client(reality_engine: FakeRealityEngineClient) -> Iterator[TestClient]:
     app = create_app()
 
     decisions = InMemoryDecisionRepository()
     goals = InMemoryGoalRepository()
     simulations = InMemorySimulationRepository()
-    reality_engine = FakeRealityEngineClient(responses=[_safe_outcome()])
+    memories = InMemoryMemoryEmbeddingRepository()
+    outcomes = InMemoryDecisionOutcomeRepository()
+    profiles = InMemoryUserBiasProfileRepository()
     identity = VerifiedIdentity(id=uuid4(), email="alejandro@example.com")
     other_identity = VerifiedIdentity(id=uuid4(), email="marina@example.com")
     verifier = StaticTokenVerifier({"valid-token": identity, "other-token": other_identity})
@@ -65,6 +94,9 @@ def client() -> Iterator[TestClient]:
     app.dependency_overrides[get_decision_repository] = lambda: decisions
     app.dependency_overrides[get_goal_repository] = lambda: goals
     app.dependency_overrides[get_simulation_repository] = lambda: simulations
+    app.dependency_overrides[get_memory_embedding_repository] = lambda: memories
+    app.dependency_overrides[get_decision_outcome_repository] = lambda: outcomes
+    app.dependency_overrides[get_user_bias_profile_repository] = lambda: profiles
     app.dependency_overrides[get_reality_engine_client] = lambda: reality_engine
     app.dependency_overrides[get_token_verifier] = lambda: verifier
 
@@ -140,3 +172,47 @@ def test_get_simulation_owned_by_another_user_returns_404(client: TestClient) ->
     )
 
     assert response.status_code == 404
+
+
+def test_report_decision_outcome_returns_calibration(client: TestClient) -> None:
+    decision_id = _create_decision(client)
+    client.post(f"/v1/decisions/{decision_id}/simulations", headers=AUTH)
+
+    response = client.post(
+        f"/v1/decisions/{decision_id}/outcome",
+        headers=AUTH,
+        json={"reported_outcome": "Acepté la oferta y me fue bien."},
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["calibration_delta"] == 15.0
+    assert body["system_errors_identified"] == ["overconfidence"]
+    assert body["closest_scenario_id"] is not None
+
+
+def test_report_decision_outcome_on_another_users_decision_returns_404(client: TestClient) -> None:
+    decision_id = _create_decision(client)
+    client.post(f"/v1/decisions/{decision_id}/simulations", headers=AUTH)
+
+    response = client.post(
+        f"/v1/decisions/{decision_id}/outcome",
+        headers={"Authorization": "Bearer other-token"},
+        json={"reported_outcome": "x"},
+    )
+
+    assert response.status_code == 404
+
+
+def test_report_decision_outcome_without_completed_simulation_returns_409(
+    client: TestClient,
+) -> None:
+    decision_id = _create_decision(client)
+
+    response = client.post(
+        f"/v1/decisions/{decision_id}/outcome",
+        headers=AUTH,
+        json={"reported_outcome": "x"},
+    )
+
+    assert response.status_code == 409

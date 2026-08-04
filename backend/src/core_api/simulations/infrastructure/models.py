@@ -11,6 +11,9 @@ true 1:N collection).
 Reality Engine's `/v1/simulate` doesn't report per-agent latency/cost
 telemetry today (see reality_engine/README.md), so there's nothing to
 store there yet.
+
+`DecisionOutcomeModel` maps `decision_outcomes` (§2.9) — the "cierre de
+ciclo" record fed by Reality Engine's Agent 12 (Aprendizaje).
 """
 
 from __future__ import annotations
@@ -62,3 +65,19 @@ class SimulationScenarioModel(Base):
     reversibility_score: Mapped[float] = mapped_column(Numeric(5, 2))
     final_score: Mapped[float] = mapped_column(Numeric(5, 2))
     rank: Mapped[int] = mapped_column(SmallInteger)
+
+
+class DecisionOutcomeModel(Base):
+    __tablename__ = "decision_outcomes"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+    decision_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("decisions.id", ondelete="CASCADE"), index=True
+    )
+    reported_outcome: Mapped[str] = mapped_column(String)
+    closest_scenario_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("simulation_scenarios.id", ondelete="SET NULL"), nullable=True
+    )
+    calibration_delta: Mapped[float] = mapped_column(Numeric(6, 2))
+    system_errors_identified: Mapped[list[str]] = mapped_column(_JSONType, default=list)
+    reported_at: Mapped[datetime] = mapped_column(UTCDateTime)

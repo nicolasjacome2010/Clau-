@@ -25,18 +25,22 @@ src/core_api/
     application/ | infrastructure/ | api/   # infra cifra/descifra raw_input en el borde
   simulations/
     domain/reality_engine_port.py   # puerto + DTOs propios — nunca importa tipos de reality_engine/
-    domain/                          # Simulation, SimulationScenario (inmutables una vez creados)
-    application/                      # RunSimulationUseCase: orquesta decisions + goals + Reality Engine
+    domain/                          # Simulation, SimulationScenario, DecisionOutcome (inmutables)
+    application/                      # RunSimulationUseCase (decisions+goals+Reality Engine, guarda
+                                        # memoria semántica si el Agente 11 la produjo) y
+                                        # ReportDecisionOutcomeUseCase (cierra el ciclo vía Agente 12)
     infrastructure/
-      reality_engine_client.py         # adaptador HTTP real, valida la forma del JSON con Pydantic
-    api/                              # /v1/decisions/{id}/simulations, /v1/simulations/{id}
+      reality_engine_client.py         # adaptador HTTP real: /v1/simulate y /v1/calibrate
+    api/                              # /v1/decisions/{id}/simulations, /v1/simulations/{id},
+                                        # /v1/decisions/{id}/outcome
   memory/
     domain/similarity.py             # cosine_similarity puro, sin numpy
     domain/                           # UserBiasProfile (media móvil ponderada), MemoryEmbedding
     application/                       # incluye dedup por similitud > 0.92 al guardar un embedding
     infrastructure/                     # embedding como JSON — ver docstring del repo para la migración a pgvector
     api/                              # /v1/memory/bias-profile, /v1/memory/embeddings(/search)
-migrations/                 # Alembic (async) — 0001 identity, 0002 goals, 0003 decisions, 0004 simulations, 0005 memory
+migrations/                 # Alembic (async) — 0001 identity, 0002 goals, 0003 decisions,
+                             # 0004 simulations, 0005 memory, 0006 decision_outcomes
 tests/
   unit/                     # Casos de uso contra fakes en memoria
   integration/               # Repositorios contra SQLite real + API contra TestClient
@@ -57,6 +61,8 @@ uvicorn core_api.main:app --reload
 ```
 
 `simulations` necesita el servicio `reality_engine/` corriendo y alcanzable en `VAROS_REALITY_ENGINE_BASE_URL` (por defecto `http://localhost:8100`) para que `POST /v1/decisions/{id}/simulations` funcione — sin `OPENAI_API_KEY` configurada ahí, el Reality Engine sigue respondiendo pero siempre falla seguro (`HALT_AND_REFER`), así que la simulación se crea igual, con `status=partial`.
+
+Cuando una simulación se completa y el Reality Engine incluyó un resumen de memoria (Agente 11), `RunSimulationUseCase` lo persiste automáticamente en `memory` — sin bloquear la simulación si el Reality Engine no lo produjo. `POST /v1/decisions/{id}/outcome` cierra el ciclo (docs/PRD.md CU8): reenvía los escenarios de la última simulación completada al Reality Engine (`/v1/calibrate`, Agente 12) junto con lo que el usuario reporta que pasó realmente, y persiste tanto el `DecisionOutcome` como el efecto en `UserBiasProfile`.
 
 ## Migraciones
 

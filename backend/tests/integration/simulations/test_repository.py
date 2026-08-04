@@ -12,8 +12,16 @@ from core_api.decisions.domain.entities import Decision, DecisionStatus, Decisio
 from core_api.decisions.infrastructure.repository import SqlAlchemyDecisionRepository
 from core_api.identity.domain.entities import User
 from core_api.identity.infrastructure.repository import SqlAlchemyUserRepository
-from core_api.simulations.domain.entities import Simulation, SimulationScenario, SimulationStatus
-from core_api.simulations.infrastructure.repository import SqlAlchemySimulationRepository
+from core_api.simulations.domain.entities import (
+    DecisionOutcome,
+    Simulation,
+    SimulationScenario,
+    SimulationStatus,
+)
+from core_api.simulations.infrastructure.repository import (
+    SqlAlchemyDecisionOutcomeRepository,
+    SqlAlchemySimulationRepository,
+)
 
 
 async def _make_decision(session: AsyncSession) -> Decision:
@@ -133,3 +141,53 @@ async def test_get_by_id_returns_none_when_missing(sqlite_session: AsyncSession)
     repo = SqlAlchemySimulationRepository(sqlite_session)
 
     assert await repo.get_by_id(uuid4()) is None
+
+
+@pytest.mark.asyncio
+async def test_create_and_get_decision_outcome_round_trips(sqlite_session: AsyncSession) -> None:
+    decision = await _make_decision(sqlite_session)
+    simulation_repo = SqlAlchemySimulationRepository(sqlite_session)
+    now = datetime.now(UTC)
+    scenario = _scenario(1)
+    await simulation_repo.create(
+        Simulation(
+            id=uuid4(),
+            decision_id=decision.id,
+            status=SimulationStatus.COMPLETED,
+            pipeline_version="v1",
+            safety_gate_result={"risk_level": "none"},
+            scenarios=(scenario,),
+            synthesis_text="síntesis",
+            reflective_question="¿Y bien?",
+            started_at=now,
+            completed_at=now,
+        )
+    )
+
+    outcome_repo = SqlAlchemyDecisionOutcomeRepository(sqlite_session)
+    outcome = DecisionOutcome(
+        id=uuid4(),
+        decision_id=decision.id,
+        reported_outcome="Acepté la oferta y me fue bien.",
+        closest_scenario_id=scenario.id,
+        calibration_delta=15.0,
+        system_errors_identified=["overconfidence"],
+        reported_at=now,
+    )
+
+    created = await outcome_repo.create(outcome)
+    fetched = await outcome_repo.get_by_decision_id(decision.id)
+
+    assert created.id == outcome.id
+    assert fetched is not None
+    assert fetched.reported_outcome == "Acepté la oferta y me fue bien."
+    assert fetched.closest_scenario_id == scenario.id
+    assert fetched.calibration_delta == 15.0
+    assert fetched.system_errors_identified == ["overconfidence"]
+
+
+@pytest.mark.asyncio
+async def test_get_by_decision_id_returns_none_when_missing(sqlite_session: AsyncSession) -> None:
+    outcome_repo = SqlAlchemyDecisionOutcomeRepository(sqlite_session)
+
+    assert await outcome_repo.get_by_decision_id(uuid4()) is None

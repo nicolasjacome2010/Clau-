@@ -35,8 +35,11 @@ from core_api.memory.infrastructure.repository import (
     SqlAlchemyUserBiasProfileRepository,
 )
 from core_api.simulations.domain.reality_engine_port import RealityEngineClient
-from core_api.simulations.domain.repositories import SimulationRepository
-from core_api.simulations.infrastructure.repository import SqlAlchemySimulationRepository
+from core_api.simulations.domain.repositories import DecisionOutcomeRepository, SimulationRepository
+from core_api.simulations.infrastructure.repository import (
+    SqlAlchemyDecisionOutcomeRepository,
+    SqlAlchemySimulationRepository,
+)
 
 _bearer_scheme = HTTPBearer(auto_error=True)
 
@@ -106,6 +109,12 @@ def get_simulation_repository(
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> SimulationRepository:
     return SqlAlchemySimulationRepository(session)
+
+
+def get_decision_outcome_repository(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> DecisionOutcomeRepository:
+    return SqlAlchemyDecisionOutcomeRepository(session)
 
 
 def get_user_bias_profile_repository(

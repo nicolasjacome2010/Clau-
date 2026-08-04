@@ -1,6 +1,6 @@
 """HTTP implementation of the Reality Engine port.
 
-Parses `/v1/simulate`'s response with local Pydantic models (validated,
+Parses Reality Engine's responses with local Pydantic models (validated,
 never raw dict indexing) and joins its three per-scenario collections
 (scenarios, comparison matrix, ranking — see reality_engine's
 `pipeline/orchestrator.py`) into the single `RealityEngineScenario` shape
@@ -16,8 +16,11 @@ import httpx
 from pydantic import BaseModel
 
 from core_api.simulations.domain.reality_engine_port import (
+    RealityEngineCalibrationOutcome,
+    RealityEngineCalibrationScenario,
     RealityEngineClient,
     RealityEngineError,
+    RealityEngineRankedScenario,
     RealityEngineScenario,
     RealityEngineSimulationOutcome,
 )
@@ -73,12 +76,25 @@ class _SynthesisResponse(BaseModel):
     reflective_question: str
 
 
+class _MemoryResponse(BaseModel):
+    summary_text: str
+    embedding: list[float]
+
+
 class _SimulateResponse(BaseModel):
     analysis: _AnalysisResponse
     scenarios: _ScenariosResponse | None = None
     comparison: _ComparisonResponse | None = None
     ranking: _RankingResponse | None = None
     synthesis: _SynthesisResponse | None = None
+    memory: _MemoryResponse | None = None
+
+
+class _CalibrateResponse(BaseModel):
+    closest_scenario_id: str | None
+    calibration_delta: float
+    system_errors_identified: list[str]
+    user_bias_profile_update: dict[str, float]
 
 
 class HttpRealityEngineClient(RealityEngineClient):
@@ -145,4 +161,46 @@ class HttpRealityEngineClient(RealityEngineClient):
             scenarios=scenarios,
             synthesis_text=parsed.synthesis.synthesis,
             reflective_question=parsed.synthesis.reflective_question,
+            memory_summary=parsed.memory.summary_text if parsed.memory else None,
+            memory_embedding=tuple(parsed.memory.embedding) if parsed.memory else None,
+        )
+
+    async def calibrate(
+        self,
+        reported_outcome: str,
+        original_scenarios: list[RealityEngineCalibrationScenario],
+        original_ranking: list[RealityEngineRankedScenario],
+    ) -> RealityEngineCalibrationOutcome:
+        try:
+            response = await self._http_client.post(
+                f"{self._base_url}/v1/calibrate",
+                json={
+                    "reported_outcome": reported_outcome,
+                    "original_scenarios": [
+                        {
+                            "id": s.id,
+                            "title": s.title,
+                            "narrative": s.narrative,
+                            "assumptions": s.assumptions,
+                            "relative_probability": s.relative_probability,
+                            "time_horizon_months": s.time_horizon_months,
+                        }
+                        for s in original_scenarios
+                    ],
+                    "original_ranking": [
+                        {"scenario_id": r.scenario_id, "final_score": r.final_score, "rank": r.rank}
+                        for r in original_ranking
+                    ],
+                },
+            )
+            response.raise_for_status()
+            parsed = _CalibrateResponse.model_validate(response.json())
+        except (httpx.HTTPError, ValueError) as exc:
+            raise RealityEngineError(f"Reality Engine calibrate request failed: {exc}") from exc
+
+        return RealityEngineCalibrationOutcome(
+            closest_scenario_id=parsed.closest_scenario_id,
+            calibration_delta=parsed.calibration_delta,
+            system_errors_identified=parsed.system_errors_identified,
+            user_bias_profile_update=parsed.user_bias_profile_update,
         )

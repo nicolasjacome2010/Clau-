@@ -34,3 +34,17 @@ class SimulationResponse(BaseModel):
     reflective_question: str | None
     started_at: datetime
     completed_at: datetime | None
+
+
+class ReportDecisionOutcomeRequest(BaseModel):
+    reported_outcome: str
+
+
+class DecisionOutcomeResponse(BaseModel):
+    id: UUID
+    decision_id: UUID
+    reported_outcome: str
+    closest_scenario_id: UUID | None
+    calibration_delta: float
+    system_errors_identified: list[str]
+    reported_at: datetime

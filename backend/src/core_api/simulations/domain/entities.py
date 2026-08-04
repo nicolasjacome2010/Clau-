@@ -58,3 +58,21 @@ class Simulation:
     reflective_question: str | None
     started_at: datetime
     completed_at: datetime | None
+
+
+@dataclass(frozen=True, slots=True)
+class DecisionOutcome:
+    """What actually happened, per docs/DATABASE.md §2.9 — the "cierre de
+    ciclo" record (docs/PRD.md CU8) that feeds Reality Engine's Agent 12
+    (Aprendizaje). Immutable once created, like `Simulation`.
+    """
+
+    id: UUID
+    decision_id: UUID
+    reported_outcome: str
+    closest_scenario_id: UUID | None
+    """References `SimulationScenario.id` (our own UUID), not Reality
+    Engine's `external_id` — the translation happens in the use case."""
+    calibration_delta: float
+    system_errors_identified: list[str]
+    reported_at: datetime

@@ -7,9 +7,18 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core_api.simulations.domain.entities import Simulation, SimulationScenario, SimulationStatus
-from core_api.simulations.domain.repositories import SimulationRepository
-from core_api.simulations.infrastructure.models import SimulationModel, SimulationScenarioModel
+from core_api.simulations.domain.entities import (
+    DecisionOutcome,
+    Simulation,
+    SimulationScenario,
+    SimulationStatus,
+)
+from core_api.simulations.domain.repositories import DecisionOutcomeRepository, SimulationRepository
+from core_api.simulations.infrastructure.models import (
+    DecisionOutcomeModel,
+    SimulationModel,
+    SimulationScenarioModel,
+)
 
 
 def _to_scenario_entity(model: SimulationScenarioModel) -> SimulationScenario:
@@ -98,3 +107,41 @@ class SqlAlchemySimulationRepository(SimulationRepository):
             )
         await self._session.flush()
         return await self._to_entity(model)
+
+
+def _to_outcome_entity(model: DecisionOutcomeModel) -> DecisionOutcome:
+    return DecisionOutcome(
+        id=model.id,
+        decision_id=model.decision_id,
+        reported_outcome=model.reported_outcome,
+        closest_scenario_id=model.closest_scenario_id,
+        calibration_delta=float(model.calibration_delta),
+        system_errors_identified=list(model.system_errors_identified),
+        reported_at=model.reported_at,
+    )
+
+
+class SqlAlchemyDecisionOutcomeRepository(DecisionOutcomeRepository):
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def get_by_decision_id(self, decision_id: UUID) -> DecisionOutcome | None:
+        result = await self._session.execute(
+            select(DecisionOutcomeModel).where(DecisionOutcomeModel.decision_id == decision_id)
+        )
+        model = result.scalars().first()
+        return _to_outcome_entity(model) if model else None
+
+    async def create(self, outcome: DecisionOutcome) -> DecisionOutcome:
+        model = DecisionOutcomeModel(
+            id=outcome.id,
+            decision_id=outcome.decision_id,
+            reported_outcome=outcome.reported_outcome,
+            closest_scenario_id=outcome.closest_scenario_id,
+            calibration_delta=outcome.calibration_delta,
+            system_errors_identified=outcome.system_errors_identified,
+            reported_at=outcome.reported_at,
+        )
+        self._session.add(model)
+        await self._session.flush()
+        return _to_outcome_entity(model)
