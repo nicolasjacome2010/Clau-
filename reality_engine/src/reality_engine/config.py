@@ -20,9 +20,13 @@ class Settings(BaseSettings):
     openai_api_key: str | None = None
     openai_safety_model: str = "gpt-5-mini"
     # docs/ARCHITECTURE.md §2.6, tier "structured-extraction": Agents 1-6
-    # (Comprensión through Análisis de Riesgos) use a cheaper/faster model
-    # than the creative-reasoning tier scenario generation will need later.
+    # and 8 (Comprensión through Análisis de Riesgos, plus Comparación) use
+    # a cheaper/faster model than the creative-reasoning tier below.
     openai_extraction_model: str = "gpt-5-mini"
+    # docs/ARCHITECTURE.md §2.6, tier "reasoning-creative": Agents 7
+    # (Generación de Escenarios) and 10 (Síntesis) — the two agents whose
+    # output quality matters most, so they get the stronger model.
+    openai_reasoning_model: str = "gpt-5.1"
 
 
 @lru_cache

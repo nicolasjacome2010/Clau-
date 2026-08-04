@@ -131,3 +131,62 @@ class RiskAnalysisOutput(BaseModel):
     """docs/REALITY_ENGINE.md §2, Agente 6 — Análisis de Riesgos."""
 
     risk_map: list[OptionRiskMap] = Field(default_factory=list)
+
+
+class Scenario(BaseModel):
+    id: str
+    title: str
+    based_on_option: str
+    narrative: str
+    assumptions: list[str] = Field(default_factory=list)
+    relative_probability: float = Field(ge=0, le=100)
+    time_horizon_months: int = Field(ge=1, le=60)
+
+
+class ScenariosOutput(BaseModel):
+    """docs/REALITY_ENGINE.md §2, Agente 7 — Generación de Escenarios."""
+
+    scenarios: list[Scenario] = Field(min_length=3, max_length=5)
+
+
+class GoalAlignmentScore(BaseModel):
+    goal: str
+    score: int = Field(ge=0, le=100)
+    justification: str
+
+
+class ScenarioComparison(BaseModel):
+    scenario_id: str
+    goal_alignment_scores: list[GoalAlignmentScore] = Field(default_factory=list)
+    risk_score: float = Field(ge=0, le=100)
+    reversibility_score: float = Field(ge=0, le=100)
+
+
+class ComparisonOutput(BaseModel):
+    """docs/REALITY_ENGINE.md §2, Agente 8 — Comparación."""
+
+    comparison_matrix: list[ScenarioComparison] = Field(default_factory=list)
+
+
+class RankedScenario(BaseModel):
+    scenario_id: str
+    final_score: float
+    rank: int
+
+
+class RankingOutput(BaseModel):
+    """docs/REALITY_ENGINE.md §2, Agente 9 — Ranking.
+
+    Not an LLM call: a pure aggregation function over Agent 8's output (see
+    `pipeline/agents/ranking.py`), included here only so it has the same
+    typed-contract shape as every other agent's output.
+    """
+
+    ranking: list[RankedScenario] = Field(default_factory=list)
+
+
+class SynthesisOutput(BaseModel):
+    """docs/REALITY_ENGINE.md §2, Agente 10 — Síntesis."""
+
+    synthesis: str = Field(max_length=1800)  # ~250 words, generous character ceiling
+    reflective_question: str

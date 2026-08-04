@@ -80,6 +80,37 @@ def test_analyze_rejects_too_many_declared_goals() -> None:
     assert response.status_code == 422
 
 
+def test_simulate_without_configured_provider_fails_safe() -> None:
+    """/v1/simulate shares Agent 0 with /v1/safety-check and /v1/analyze —
+    without OPENAI_API_KEY it must fail safe and never reach Agents 1-10.
+    """
+    with TestClient(create_app()) as client:
+        response = client.post("/v1/simulate", json={"raw_input": "algo neutral"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["analysis"]["safety"]["recommended_action"] == "halt_and_refer"
+    assert body["scenarios"] is None
+    assert body["synthesis"] is None
+
+
+def test_simulate_deterministic_risk_pattern_short_circuits() -> None:
+    with TestClient(create_app()) as client:
+        response = client.post("/v1/simulate", json={"raw_input": "quiero quitarme la vida"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["analysis"]["safety"]["risk_level"] == "acute_risk"
+    assert body["scenarios"] is None
+
+
+def test_simulate_rejects_empty_input() -> None:
+    with TestClient(create_app()) as client:
+        response = client.post("/v1/simulate", json={"raw_input": ""})
+
+    assert response.status_code == 422
+
+
 def test_healthz_is_public() -> None:
     with TestClient(create_app()) as client:
         response = client.get("/healthz")
