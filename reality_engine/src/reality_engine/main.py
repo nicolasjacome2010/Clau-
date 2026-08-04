@@ -14,6 +14,7 @@ from reality_engine.ai_gateway.domain.ports import LLMProvider, ModelTier
 from reality_engine.api.router import router as reality_engine_router
 from reality_engine.config import Settings, get_settings
 from reality_engine.pipeline.agents.safety_gate import SafetyGateAgent
+from reality_engine.pipeline.orchestrator import AnalysisPipeline
 
 
 def _build_providers_by_tier(settings: Settings) -> dict[ModelTier, list[LLMProvider]]:
@@ -30,6 +31,9 @@ def _build_providers_by_tier(settings: Settings) -> dict[ModelTier, list[LLMProv
         providers[ModelTier.SAFETY_CLASSIFICATION] = [
             OpenAIProvider(client, model=settings.openai_safety_model)
         ]
+        providers[ModelTier.STRUCTURED_EXTRACTION] = [
+            OpenAIProvider(client, model=settings.openai_extraction_model)
+        ]
 
     return providers
 
@@ -41,6 +45,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     gateway = AIGateway(_build_providers_by_tier(settings))
     app.state.safety_gate_agent = SafetyGateAgent(gateway)
+    app.state.analysis_pipeline = AnalysisPipeline(gateway)
 
     app.include_router(reality_engine_router)
 

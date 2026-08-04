@@ -16,3 +16,8 @@ class SafetyCheckResponse(BaseModel):
     signals_detected: list[str]
     safe_to_proceed: bool
     recommended_action: RecommendedAction
+
+
+class AnalyzeRequest(BaseModel):
+    raw_input: str = Field(min_length=1, max_length=4000)
+    declared_goals: list[str] = Field(default_factory=list, max_length=5)

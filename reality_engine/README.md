@@ -2,7 +2,7 @@
 
 Servicio independiente del Core API (`docs/ARCHITECTURE.md §2.2`): su perfil de carga (IO-bound esperando respuestas de IA, alta latencia, necesidad de colas) es fundamentalmente distinto al del resto del backend CRUD.
 
-**Estado actual: solo el Agente 0 (Risk & Safety Gate) está implementado.** El pipeline completo de 13 agentes está especificado en `docs/REALITY_ENGINE.md` pero no construido — no existe todavía un endpoint `/v1/simulate`, ni orquestador de grafo, ni workers async, ni streaming de progreso por WebSocket (todo eso descrito en `docs/ARCHITECTURE.md §2.2`).
+**Estado actual: Agentes 0-6 de 13 están implementados** (Risk & Safety Gate → Comprensión → Resumen → Extracción de Objetivos → Extracción de Emociones → Análisis Psicológico → Análisis de Riesgos), encadenados por `AnalysisPipeline` y expuestos en `POST /v1/analyze`. **Faltan los Agentes 7-12** (Generación de Escenarios, Comparación, Ranking, Síntesis, Memoria, Aprendizaje) — no existe todavía `/v1/simulate`, ni orquestador de grafo con paralelización real, ni workers async, ni streaming de progreso por WebSocket (todo eso descrito en `docs/ARCHITECTURE.md §2.2`). Los Agentes 11-12 además necesitan el bounded context `memory` de Core API, que tampoco existe aún.
 
 ## Por qué el Agente 0 primero
 
@@ -20,12 +20,20 @@ src/reality_engine/
       fake_provider.py         # doble de test, sin red
       openai_provider.py        # adaptador real (Structured Outputs), probado con cliente mockeado
   pipeline/
-    domain/schemas.py         # contratos JSON de cada agente (Pydantic)
-    agents/safety_gate.py       # Agente 0: reglas deterministas + clasificador LLM, fail-safe
-  api/                        # router FastAPI (solo /v1/safety-check por ahora)
+    domain/schemas.py         # contratos JSON de cada agente (Pydantic), Agentes 0-6
+    agents/
+      safety_gate.py            # Agente 0: reglas deterministas + clasificador LLM, fail-safe
+      comprehension.py           # Agente 1
+      summary.py                 # Agente 2
+      goals_extraction.py        # Agente 3 (normaliza pesos de forma determinista)
+      emotions.py                 # Agente 4
+      psychology.py                # Agente 5
+      risk_analysis.py              # Agente 6
+    orchestrator.py             # AnalysisPipeline: encadena 0-6, corta si Agente 0 dice no-seguro
+  api/                        # router FastAPI (/v1/safety-check, /v1/analyze)
 tests/
   unit/ai_gateway/            # retry/fallback del gateway + adaptador OpenAI mockeado
-  unit/pipeline/               # Agente 0: camino determinista, camino LLM, fail-safe
+  unit/pipeline/               # cada agente aislado + el orquestador completo
   integration/                  # API vía TestClient
 ```
 

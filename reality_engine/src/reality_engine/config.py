@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     # unscreened input through.
     openai_api_key: str | None = None
     openai_safety_model: str = "gpt-5-mini"
+    # docs/ARCHITECTURE.md §2.6, tier "structured-extraction": Agents 1-6
+    # (Comprensión through Análisis de Riesgos) use a cheaper/faster model
+    # than the creative-reasoning tier scenario generation will need later.
+    openai_extraction_model: str = "gpt-5-mini"
 
 
 @lru_cache

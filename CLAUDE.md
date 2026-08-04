@@ -8,11 +8,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 1. `docs/PRD.md` — vision, users, user stories, navigation map, roadmap, business model, KPIs.
 2. `docs/ARCHITECTURE.md` — system architecture, service boundaries, and **§0 explicitly documents where the implementation deviates from the original brief and why** (multi-provider AI gateway instead of OpenAI-only, modular monolith instead of microservices-from-day-1, pgvector instead of a separate vector DB). Read §0 before assuming the brief's stack is followed literally.
-3. `docs/REALITY_ENGINE.md` — the 13-agent decision-simulation pipeline (Safety Gate → Comprehension → ... → Learning), each agent's prompt/input/output JSON contract and error handling. Only Agent 0 is implemented so far (see `reality_engine/`).
+3. `docs/REALITY_ENGINE.md` — the 13-agent decision-simulation pipeline (Safety Gate → Comprehension → ... → Learning), each agent's prompt/input/output JSON contract and error handling. Agents 0-6 are implemented so far (see `reality_engine/`); 7-12 (scenario generation onward) are not.
 4. `docs/DATABASE.md` — full normalized schema. Only the `identity` (`users`, `user_profiles`), `goals`, and `decisions` slices are implemented so far; the rest is design-only.
 5. `docs/UX_DESIGN.md` — screen-by-screen design system (color, type, motion, wireframes) for the future Flutter client. Not yet implemented.
 
-Only **Core API modules 1-3 ("identity", "goals", "decisions")** plus **Reality Engine Agent 0** have been built. Everything else in those docs is design, not yet code — don't assume a feature exists just because it's documented.
+Only **Core API modules 1-3 ("identity", "goals", "decisions")** plus **Reality Engine Agents 0-6** (the "analysis" half of the pipeline, up through Análisis de Riesgos) have been built. Everything else in those docs is design, not yet code — don't assume a feature exists just because it's documented.
 
 ## Repository layout
 
@@ -36,15 +36,17 @@ reality_engine/  Reality Engine service — SEPARATE Python project/venv, not pa
     ai_gateway/domain/ports.py            # LLMProvider port, ModelTier, LLMGenerationError
     ai_gateway/application/gateway.py      # AIGateway: retry + fallback across providers per tier
     ai_gateway/infrastructure/             # fake_provider.py (tests) + openai_provider.py (real, Structured Outputs)
-    pipeline/domain/schemas.py             # per-agent JSON contracts (Pydantic)
-    pipeline/agents/safety_gate.py           # Agent 0: deterministic patterns + LLM classifier, fail-safe
-    api/                                    # FastAPI router — only POST /v1/safety-check exists
-  tests/unit/, tests/integration/            # gateway retry/fallback, mocked-OpenAI adapter, agent, API
+    pipeline/domain/schemas.py             # per-agent JSON contracts (Pydantic), Agents 0-6
+    pipeline/agents/                        # safety_gate, comprehension, summary, goals_extraction,
+                                             # emotions, psychology, risk_analysis — one file per agent
+    pipeline/orchestrator.py                 # AnalysisPipeline: chains 0-6, short-circuits if Agent 0 halts
+    api/                                    # FastAPI router — POST /v1/safety-check, POST /v1/analyze
+  tests/unit/, tests/integration/            # gateway retry/fallback, mocked-OpenAI adapter, each agent, orchestrator, API
 docker-compose.yml   Full local stack: Postgres (pgvector image) + Redis + core-api
 .github/workflows/backend-ci.yml, reality-engine-ci.yml   Lint (ruff) + type check (mypy --strict) + tests, each path-filtered to its own service directory
 ```
 
-There is no Flutter client, Billing service, `simulations`, or `memory` bounded context yet, and the Reality Engine pipeline has only Agent 0 of 13 — `simulations` (in `backend/`) is next, and it needs Agents 1-12 to actually produce results, so building it means growing `reality_engine/` further, not just `backend/`.
+There is no Flutter client, Billing service, `simulations`, or `memory` bounded context yet, and the Reality Engine pipeline has Agents 0-6 of 13 — `simulations` (in `backend/`) is next, and it needs Agents 7-12 (Generación de Escenarios onward, still not built) to actually produce a full simulation result, so building it means growing `reality_engine/` further, not just `backend/`. Agents 11-12 (Memoria, Aprendizaje) additionally need the `memory` bounded context in Core API, which doesn't exist yet either.
 
 ## Commands
 
@@ -82,11 +84,13 @@ CI (`.github/workflows/backend-ci.yml`, `reality-engine-ci.yml`) runs exactly `r
 - **JSON/JSONB columns**: declare as `JSON().with_variant(JSONB, "postgresql")` (see `identity/infrastructure/models.py`) so models stay portable to the SQLite test path.
 - **Auth**: services never call Supabase Auth directly — `core_api/auth/token_verifier.py` verifies the JWT Supabase already issued (JWKS, cached). `GetOrCreateUserUseCase` does JIT provisioning: the domain `User` row is created on the first authenticated request, not on a signup webhook.
 
-### Reality Engine (`reality_engine/`) — established by the AI Gateway + Agent 0
+### Reality Engine (`reality_engine/`) — established by the AI Gateway + Agents 0-6
 
 - **Never call a model provider's SDK directly from a pipeline agent.** Agents depend on `AIGateway.generate_structured(tier=..., response_model=...)`, never on `openai`/`anthropic` clients. Adding a provider means writing a new `LLMProvider` in `ai_gateway/infrastructure/` — no caller changes.
 - **Fail-safe, not fail-open, on any AI Gateway error.** `SafetyGateAgent` treats "no provider configured" and "provider exhausted its retries" identically to "the model said high risk": always escalate to the conservative outcome, never let unscreened input silently proceed. Apply the same posture to any future agent that gates the pipeline.
 - **Deterministic checks run before LLM calls, not after**, when a fast, free, always-available pre-screen can short-circuit an expensive/uncertain model call (see `_deterministic_prescreen` in `pipeline/agents/safety_gate.py`). They can only escalate risk, never lower what the model would have said.
+- **Deterministic post-processing stays out of the model's hands too.** `GoalsExtractionAgent` normalizes weights to sum to 100 in plain code after the LLM call, never by re-prompting — same principle as Agent 9 (Ranking) in `docs/REALITY_ENGINE.md`, which is a pure function over Agent 8's output, not a model call at all.
+- **Each agent is one class with one `run()` method**, constructor-injected with `AIGateway`; the orchestrator (`pipeline/orchestrator.py`) is the only place that sequences them and owns the short-circuit-on-unsafe branch. Don't let an agent call another agent directly.
 - **Real provider adapters are tested against a mocked client, not the network.** `test_openai_provider.py` verifies prompt construction, JSON parsing, and error mapping with `unittest.mock.AsyncMock` — there is no `OPENAI_API_KEY` in CI or in this environment. `FakeLLMProvider` (canned responses/errors, in order) is for testing gateway and agent logic; it is never imported outside `tests/`.
 
 ### Both services
