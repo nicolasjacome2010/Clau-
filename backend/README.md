@@ -1,6 +1,6 @@
 # VAR OS — Core API
 
-Monolito modular (Clean Architecture / DDD selectivo) descrito en `docs/ARCHITECTURE.md §4`. Bounded contexts implementados hasta ahora: **identity**, **goals**, **decisions**, **simulations**.
+Monolito modular (Clean Architecture / DDD selectivo) descrito en `docs/ARCHITECTURE.md §4`. Bounded contexts implementados hasta ahora: **identity**, **goals**, **decisions**, **simulations**, **memory**.
 
 ## Estructura
 
@@ -30,7 +30,13 @@ src/core_api/
     infrastructure/
       reality_engine_client.py         # adaptador HTTP real, valida la forma del JSON con Pydantic
     api/                              # /v1/decisions/{id}/simulations, /v1/simulations/{id}
-migrations/                 # Alembic (async) — 0001 identity, 0002 goals, 0003 decisions, 0004 simulations
+  memory/
+    domain/similarity.py             # cosine_similarity puro, sin numpy
+    domain/                           # UserBiasProfile (media móvil ponderada), MemoryEmbedding
+    application/                       # incluye dedup por similitud > 0.92 al guardar un embedding
+    infrastructure/                     # embedding como JSON — ver docstring del repo para la migración a pgvector
+    api/                              # /v1/memory/bias-profile, /v1/memory/embeddings(/search)
+migrations/                 # Alembic (async) — 0001 identity, 0002 goals, 0003 decisions, 0004 simulations, 0005 memory
 tests/
   unit/                     # Casos de uso contra fakes en memoria
   integration/               # Repositorios contra SQLite real + API contra TestClient

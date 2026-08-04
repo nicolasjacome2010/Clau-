@@ -29,6 +29,11 @@ from core_api.identity.infrastructure.repository import (
     SqlAlchemyUserProfileRepository,
     SqlAlchemyUserRepository,
 )
+from core_api.memory.domain.repositories import MemoryEmbeddingRepository, UserBiasProfileRepository
+from core_api.memory.infrastructure.repository import (
+    SqlAlchemyMemoryEmbeddingRepository,
+    SqlAlchemyUserBiasProfileRepository,
+)
 from core_api.simulations.domain.reality_engine_port import RealityEngineClient
 from core_api.simulations.domain.repositories import SimulationRepository
 from core_api.simulations.infrastructure.repository import SqlAlchemySimulationRepository
@@ -101,3 +106,15 @@ def get_simulation_repository(
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> SimulationRepository:
     return SqlAlchemySimulationRepository(session)
+
+
+def get_user_bias_profile_repository(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> UserBiasProfileRepository:
+    return SqlAlchemyUserBiasProfileRepository(session)
+
+
+def get_memory_embedding_repository(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> MemoryEmbeddingRepository:
+    return SqlAlchemyMemoryEmbeddingRepository(session)

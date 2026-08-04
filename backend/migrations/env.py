@@ -19,6 +19,7 @@ from core_api.db import Base, create_engine
 from core_api.decisions.infrastructure import models as decisions_models  # noqa: F401
 from core_api.goals.infrastructure import models as goals_models  # noqa: F401
 from core_api.identity.infrastructure import models as identity_models  # noqa: F401
+from core_api.memory.infrastructure import models as memory_models  # noqa: F401
 from core_api.simulations.infrastructure import models as simulations_models  # noqa: F401
 
 config = context.config
