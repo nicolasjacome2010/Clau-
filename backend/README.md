@@ -1,6 +1,6 @@
 # VAR OS — Core API
 
-Monolito modular (Clean Architecture / DDD selectivo) descrito en `docs/ARCHITECTURE.md §4`. Bounded contexts implementados hasta ahora: **identity**, **goals**, **decisions**.
+Monolito modular (Clean Architecture / DDD selectivo) descrito en `docs/ARCHITECTURE.md §4`. Bounded contexts implementados hasta ahora: **identity**, **goals**, **decisions**, **simulations**.
 
 ## Estructura
 
@@ -23,7 +23,14 @@ src/core_api/
   decisions/
     domain/                # Decision (agregado raíz, máquina de estados de status)
     application/ | infrastructure/ | api/   # infra cifra/descifra raw_input en el borde
-migrations/                 # Alembic (async) — 0001 identity, 0002 goals, 0003 decisions
+  simulations/
+    domain/reality_engine_port.py   # puerto + DTOs propios — nunca importa tipos de reality_engine/
+    domain/                          # Simulation, SimulationScenario (inmutables una vez creados)
+    application/                      # RunSimulationUseCase: orquesta decisions + goals + Reality Engine
+    infrastructure/
+      reality_engine_client.py         # adaptador HTTP real, valida la forma del JSON con Pydantic
+    api/                              # /v1/decisions/{id}/simulations, /v1/simulations/{id}
+migrations/                 # Alembic (async) — 0001 identity, 0002 goals, 0003 decisions, 0004 simulations
 tests/
   unit/                     # Casos de uso contra fakes en memoria
   integration/               # Repositorios contra SQLite real + API contra TestClient
@@ -36,12 +43,14 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 cp .env.example .env   # y completa VAROS_SUPABASE_URL y VAROS_FIELD_ENCRYPTION_KEY
 
-# stack completo (Postgres + Redis + API) desde la raíz del repo:
+# stack completo (Postgres + Redis + Core API + Reality Engine) desde la raíz del repo:
 docker compose up --build
 
 # o solo la API contra un Postgres local ya corriendo:
 uvicorn core_api.main:app --reload
 ```
+
+`simulations` necesita el servicio `reality_engine/` corriendo y alcanzable en `VAROS_REALITY_ENGINE_BASE_URL` (por defecto `http://localhost:8100`) para que `POST /v1/decisions/{id}/simulations` funcione — sin `OPENAI_API_KEY` configurada ahí, el Reality Engine sigue respondiendo pero siempre falla seguro (`HALT_AND_REFER`), así que la simulación se crea igual, con `status=partial`.
 
 ## Migraciones
 

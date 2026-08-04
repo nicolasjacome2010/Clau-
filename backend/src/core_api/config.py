@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     # this value outside local development.
     field_encryption_key: str = "8QaRBSQOvwlezcaKrQvir-q8zngdayjGpHYtlM3tHxc="
 
+    # Base URL of the Reality Engine service (separate deployment, see
+    # reality_engine/README.md). Default matches its Dockerfile's EXPOSEd port.
+    reality_engine_base_url: str = "http://localhost:8100"
+
 
 @lru_cache
 def get_settings() -> Settings:

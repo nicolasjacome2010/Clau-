@@ -9,10 +9,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 1. `docs/PRD.md` — vision, users, user stories, navigation map, roadmap, business model, KPIs.
 2. `docs/ARCHITECTURE.md` — system architecture, service boundaries, and **§0 explicitly documents where the implementation deviates from the original brief and why** (multi-provider AI gateway instead of OpenAI-only, modular monolith instead of microservices-from-day-1, pgvector instead of a separate vector DB). Read §0 before assuming the brief's stack is followed literally.
 3. `docs/REALITY_ENGINE.md` — the 13-agent decision-simulation pipeline (Safety Gate → Comprehension → ... → Learning), each agent's prompt/input/output JSON contract and error handling. Agents 0-10 are implemented so far (see `reality_engine/`); only 11-12 (Memoria, Aprendizaje) are not.
-4. `docs/DATABASE.md` — full normalized schema. Only the `identity` (`users`, `user_profiles`), `goals`, and `decisions` slices are implemented so far; the rest is design-only.
+4. `docs/DATABASE.md` — full normalized schema. Only the `identity` (`users`, `user_profiles`), `goals`, `decisions`, and `simulations`/`simulation_scenarios` slices are implemented so far (`simulation_steps` and the separate `simulation_synthesis` table are not — see `simulations/infrastructure/models.py`); the rest is design-only.
 5. `docs/UX_DESIGN.md` — screen-by-screen design system (color, type, motion, wireframes) for the future Flutter client. Not yet implemented.
 
-Only **Core API modules 1-3 ("identity", "goals", "decisions")** plus **Reality Engine Agents 0-10** (everything except Memoria and Aprendizaje) have been built. Everything else in those docs is design, not yet code — don't assume a feature exists just because it's documented.
+Only **Core API modules 1-4 ("identity", "goals", "decisions", "simulations")** plus **Reality Engine Agents 0-10** (everything except Memoria and Aprendizaje) have been built. Everything else in those docs is design, not yet code — don't assume a feature exists just because it's documented.
 
 ## Repository layout
 
@@ -26,10 +26,13 @@ backend/         Core API service (Python/FastAPI, Clean Architecture monolith �
     identity/domain|application|infrastructure|api # bounded context: user profile, JIT provisioning
     goals/domain|application|infrastructure|api     # bounded context: user's weighted decision goals
     decisions/domain|application|infrastructure|api # bounded context: the Decision aggregate root
+    simulations/domain/reality_engine_port.py        # port + its OWN DTOs — never imports reality_engine's types
+    simulations/domain|application|infrastructure|api # RunSimulationUseCase ties decisions+goals+Reality Engine together
   migrations/    Alembic (async, drives off core_api.config.Settings, not a static URL in alembic.ini)
-                 0001 identity tables, 0002 goals table, 0003 decisions table
+                 0001 identity, 0002 goals, 0003 decisions, 0004 simulations+simulation_scenarios
   tests/unit/    Use cases against in-memory fakes of the domain repository interfaces
-  tests/integration/  Repositories against a real SQLite round-trip; API against FastAPI TestClient
+  tests/integration/  Repositories against a real SQLite round-trip; API against FastAPI TestClient;
+                       the Reality Engine HTTP client against an httpx.MockTransport (no real network)
 reality_engine/  Reality Engine service — SEPARATE Python project/venv, not part of backend/
                  (docs/ARCHITECTURE.md §2.2: different load profile, deployed independently)
   src/reality_engine/
@@ -44,11 +47,11 @@ reality_engine/  Reality Engine service — SEPARATE Python project/venv, not pa
     pipeline/orchestrator.py                 # AnalysisPipeline (0-6) and SimulationPipeline (0-10)
     api/                                    # FastAPI router — /v1/safety-check, /v1/analyze, /v1/simulate
   tests/unit/, tests/integration/            # gateway retry/fallback, mocked-OpenAI adapter, each agent, both orchestrators, API
-docker-compose.yml   Full local stack: Postgres (pgvector image) + Redis + core-api
+docker-compose.yml   Full local stack: Postgres (pgvector image) + Redis + core-api + reality-engine
 .github/workflows/backend-ci.yml, reality-engine-ci.yml   Lint (ruff) + type check (mypy --strict) + tests, each path-filtered to its own service directory
 ```
 
-There is no Flutter client, Billing service, `simulations`, or `memory` bounded context yet. The Reality Engine pipeline has Agents 0-10 of 13 — only Agents 11-12 (Memoria, Aprendizaje) are missing, and they're blocked on the `memory` bounded context in Core API, which doesn't exist yet. `simulations` (in `backend/`) is the next module: it persists what `reality_engine/`'s `/v1/simulate` already produces (docs/DATABASE.md §2.5-2.7) — the two need to be wired together, not built from scratch.
+There is no Flutter client, Billing service, or `memory` bounded context yet. The Reality Engine pipeline has Agents 0-10 of 13 — only Agents 11-12 (Memoria, Aprendizaje) are missing, and they're blocked on the `memory` bounded context in Core API, which doesn't exist yet, so building `memory` is the natural next step (it unblocks the last two agents *and* is a real Core API module in its own right). `simulations` calls `reality_engine`'s `/v1/simulate` synchronously over HTTP (`simulations/infrastructure/reality_engine_client.py`) — there's no queue yet (see that module's docstring for why that's an accepted, documented gap, not an oversight).
 
 ## Commands
 
@@ -62,7 +65,7 @@ pip install -e ".[dev]"
 ruff check src tests && mypy src && pytest -v
 pytest tests/unit/identity/test_use_cases.py::test_get_or_create_user_is_idempotent  # single test
 alembic upgrade head       # needs VAROS_DATABASE_URL, see .env.example
-docker compose up --build  # from repo root: Postgres + Redis + API together
+docker compose up --build  # from repo root: Postgres + Redis + Core API + Reality Engine together
 
 # reality_engine/ (Reality Engine)
 cd reality_engine
@@ -75,7 +78,7 @@ CI (`.github/workflows/backend-ci.yml`, `reality-engine-ci.yml`) runs exactly `r
 
 ## Architecture conventions
 
-### Core API (`backend/`) — established by `identity`/`goals`/`decisions`, follow for every new bounded context
+### Core API (`backend/`) — established by `identity`/`goals`/`decisions`/`simulations`, follow for every new bounded context
 
 - **Layering is directional and non-negotiable**: `api/` → `application/` (use cases) → `domain/` (entities + abstract repository interfaces, zero framework imports) ← `infrastructure/` (SQLAlchemy models + concrete repositories implementing the domain interfaces). Use cases depend on the domain interfaces, never on `infrastructure` directly (Dependency Inversion). See `backend/README.md` for the exact file layout to copy for the next bounded context.
 - **Repository pattern everywhere.** Every persistence access goes through an ABC defined in `domain/repositories.py`; production code gets `SqlAlchemy*Repository`, tests get either an in-memory fake (unit tests) or the real repository against SQLite (integration tests) — never mock the ORM directly.
@@ -85,6 +88,8 @@ CI (`.github/workflows/backend-ci.yml`, `reality-engine-ci.yml`) runs exactly `r
 - **Datetimes**: use the shared `UTCDateTime` type decorator from `core_api/db.py` for any timezone-aware column, not raw `DateTime(timezone=True)`. SQLite (used in integration tests) silently drops tzinfo on round-trip; this decorator normalizes it back to UTC on read so tests and Postgres behave identically. This was a real bug caught while building `identity` — don't reintroduce it in new modules.
 - **JSON/JSONB columns**: declare as `JSON().with_variant(JSONB, "postgresql")` (see `identity/infrastructure/models.py`) so models stay portable to the SQLite test path.
 - **Auth**: services never call Supabase Auth directly — `core_api/auth/token_verifier.py` verifies the JWT Supabase already issued (JWKS, cached). `GetOrCreateUserUseCase` does JIT provisioning: the domain `User` row is created on the first authenticated request, not on a signup webhook.
+- **Calling the other service never leaks its types across the boundary.** `simulations/domain/reality_engine_port.py` defines its own plain dataclasses for what a simulation outcome looks like; `simulations/infrastructure/reality_engine_client.py` is the only file that knows Reality Engine's actual JSON shape (validated with local, HTTP-layer-only Pydantic models) and translates it into those dataclasses. Never `import reality_engine` from `backend/` — they're separate deployable services with separate dependency sets.
+- **Cross-bounded-context orchestration belongs in one use case, not scattered.** `RunSimulationUseCase` is the only place that reads from `decisions` and `goals` and writes to `simulations` in the same operation; each bounded context still only exposes its own repository interface, so the coupling is visible at the use-case's constructor, not hidden inside a repository.
 
 ### Reality Engine (`reality_engine/`) — established by the AI Gateway + Agents 0-10
 

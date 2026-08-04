@@ -29,6 +29,9 @@ from core_api.identity.infrastructure.repository import (
     SqlAlchemyUserProfileRepository,
     SqlAlchemyUserRepository,
 )
+from core_api.simulations.domain.reality_engine_port import RealityEngineClient
+from core_api.simulations.domain.repositories import SimulationRepository
+from core_api.simulations.infrastructure.repository import SqlAlchemySimulationRepository
 
 _bearer_scheme = HTTPBearer(auto_error=True)
 
@@ -52,6 +55,10 @@ def get_token_verifier(request: Request) -> TokenVerifier:
 
 def get_field_encryptor(request: Request) -> FieldEncryptor:
     return cast(FieldEncryptor, request.app.state.field_encryptor)
+
+
+def get_reality_engine_client(request: Request) -> RealityEngineClient:
+    return cast(RealityEngineClient, request.app.state.reality_engine_client)
 
 
 async def get_current_identity(
@@ -88,3 +95,9 @@ def get_decision_repository(
     encryptor: Annotated[FieldEncryptor, Depends(get_field_encryptor)],
 ) -> DecisionRepository:
     return SqlAlchemyDecisionRepository(session, encryptor)
+
+
+def get_simulation_repository(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> SimulationRepository:
+    return SqlAlchemySimulationRepository(session)
