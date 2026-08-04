@@ -216,3 +216,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Per-service Python virtualenvs (this repo has multiple Python projects)
+reality_engine/.venv/
+backend/.venv/
