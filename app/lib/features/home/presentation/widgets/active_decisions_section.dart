@@ -4,15 +4,26 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../design_system/var_colors.dart';
 import '../../../../design_system/var_spacing.dart';
 import '../../../../design_system/var_typography.dart';
-import '../controllers/active_decisions_controller.dart';
+import '../../../decisions/presentation/controllers/decisions_controller.dart';
 import 'active_decision_card.dart';
 
+/// Home's own view over the shared decisions list (see
+/// `DecisionsController`'s docstring for why it's shared, not fetched
+/// separately) — filters client-side to `isActive`, the "Decisiones
+/// activas" subset docs/UX_DESIGN.md Pantalla 4 calls for.
 class ActiveDecisionsSection extends ConsumerWidget {
   const ActiveDecisionsSection({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final asyncDecisions = ref.watch(activeDecisionsControllerProvider);
+    final asyncDecisions = ref.watch(
+      decisionsControllerProvider.select(
+        (value) => value.whenData(
+          (decisions) =>
+              decisions.where((decision) => decision.isActive).toList(),
+        ),
+      ),
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -49,9 +60,8 @@ class ActiveDecisionsSection extends ConsumerWidget {
               ),
             ),
             error: (error, _) => _ActiveDecisionsError(
-              onRetry: () => ref
-                  .read(activeDecisionsControllerProvider.notifier)
-                  .refresh(),
+              onRetry: () =>
+                  ref.read(decisionsControllerProvider.notifier).refresh(),
             ),
           ),
         ),

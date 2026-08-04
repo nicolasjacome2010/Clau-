@@ -44,6 +44,8 @@ class ApiDecisionsRepository implements DecisionsRepository {
         title: raw['title'] as String,
         vertical: raw['vertical'] as String,
         status: raw['status'] as String,
+        createdAt: DateTime.parse(raw['created_at'] as String),
+        updatedAt: DateTime.parse(raw['updated_at'] as String),
       );
     }).toList();
   }

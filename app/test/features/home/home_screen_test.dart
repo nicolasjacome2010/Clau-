@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:var_os_app/features/home/domain/decision_summary.dart';
-import 'package:var_os_app/features/home/domain/decisions_repository.dart';
-import 'package:var_os_app/features/home/presentation/controllers/active_decisions_controller.dart';
+import 'package:var_os_app/features/decisions/domain/decisions_repository.dart';
+import 'package:var_os_app/features/decisions/presentation/controllers/decisions_controller.dart';
 import 'package:var_os_app/features/home/presentation/screens/home_screen.dart';
 
-import 'fakes.dart';
+import '../decisions/fakes.dart';
 
 void main() {
   Future<void> pumpHome(
@@ -28,14 +27,13 @@ void main() {
     await pumpHome(
       tester,
       repository: FakeDecisionsRepository(
-        decisions: const [
-          DecisionSummary(
+        decisions: [
+          testDecision(
             id: '1',
             title: 'Oferta de trabajo Z',
-            vertical: 'career',
             status: 'simulating',
           ),
-          DecisionSummary(
+          testDecision(
             id: '2',
             title: 'Mudarme a Lisboa',
             vertical: 'relocation',
@@ -55,19 +53,9 @@ void main() {
     await pumpHome(
       tester,
       repository: FakeDecisionsRepository(
-        decisions: const [
-          DecisionSummary(
-            id: '1',
-            title: 'Activa',
-            vertical: 'career',
-            status: 'clarifying',
-          ),
-          DecisionSummary(
-            id: '2',
-            title: 'Ya completada',
-            vertical: 'career',
-            status: 'completed',
-          ),
+        decisions: [
+          testDecision(id: '1', title: 'Activa', status: 'clarifying'),
+          testDecision(id: '2', title: 'Ya completada', status: 'completed'),
         ],
       ),
     );
@@ -102,18 +90,27 @@ void main() {
     expect(find.text('No pudimos cargar tus decisiones.'), findsOneWidget);
   });
 
-  testWidgets('switching to the Mis Decisiones tab shows its placeholder', (
+  testWidgets('switching to the Mis Decisiones tab shows the real list', (
     tester,
   ) async {
-    await pumpHome(tester, repository: FakeDecisionsRepository());
+    await pumpHome(
+      tester,
+      repository: FakeDecisionsRepository(
+        decisions: [
+          testDecision(
+            id: '1',
+            title: 'Oferta de trabajo Z',
+            status: 'simulating',
+          ),
+        ],
+      ),
+    );
 
     await tester.tap(find.text('Mis Decisiones'));
     await tester.pumpAndSettle();
 
-    expect(
-      find.text('Mis Decisiones llega en un próximo módulo.'),
-      findsOneWidget,
-    );
+    expect(find.text('Activas'), findsOneWidget);
+    expect(find.text('Oferta de trabajo Z'), findsWidgets);
   });
 
   testWidgets('tapping the mic shows a coming-soon notice', (tester) async {

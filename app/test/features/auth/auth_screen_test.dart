@@ -4,10 +4,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:var_os_app/core/routing/app_routes.dart';
 import 'package:var_os_app/features/auth/presentation/screens/auth_screen.dart';
-import 'package:var_os_app/features/home/presentation/controllers/active_decisions_controller.dart';
+import 'package:var_os_app/features/decisions/presentation/controllers/decisions_controller.dart';
 import 'package:var_os_app/features/home/presentation/screens/home_screen.dart';
 
-import '../home/fakes.dart';
+import '../decisions/fakes.dart';
 
 void main() {
   Future<void> pumpAuth(WidgetTester tester) async {

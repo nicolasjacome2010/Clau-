@@ -11,14 +11,20 @@ class DecisionSummary {
     required this.title,
     required this.vertical,
     required this.status,
+    required this.createdAt,
+    required this.updatedAt,
   });
 
   final String id;
   final String title;
   final String vertical;
   final String status;
+  final DateTime createdAt;
+  final DateTime updatedAt;
 
   static const activeStatuses = {'draft', 'clarifying', 'simulating'};
 
   bool get isActive => activeStatuses.contains(status);
+  bool get isCompleted => status == 'completed';
+  bool get isArchived => status == 'archived';
 }

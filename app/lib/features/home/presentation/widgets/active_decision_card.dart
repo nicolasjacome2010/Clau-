@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import '../../../../design_system/var_colors.dart';
 import '../../../../design_system/var_spacing.dart';
 import '../../../../design_system/var_typography.dart';
-import '../../domain/decision_summary.dart';
-import 'decision_status_style.dart';
+import '../../../decisions/domain/decision_summary.dart';
+import '../../../decisions/presentation/widgets/decision_status_style.dart';
 
 class ActiveDecisionCard extends StatelessWidget {
   const ActiveDecisionCard({super.key, required this.decision});
