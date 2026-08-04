@@ -42,3 +42,20 @@ class LLMProvider(ABC):
         provider cannot produce a valid instance.
         """
         ...
+
+
+class EmbeddingGenerationError(Exception):
+    """Raised for any embedding-provider failure. Mirrors `LLMGenerationError`
+    but kept as a distinct type since callers (Agent 11 — Memoria) treat a
+    missing/failed embedding as "skip storing this memory", never as a
+    reason to fail the whole simulation (see pipeline/orchestrator.py).
+    """
+
+
+class EmbeddingProvider(ABC):
+    @abstractmethod
+    async def embed(self, text: str) -> list[float]:
+        """Returns the embedding vector for `text`. Raises
+        `EmbeddingGenerationError` if the provider cannot produce one.
+        """
+        ...

@@ -4,6 +4,7 @@ import pytest
 
 from reality_engine.ai_gateway.application.gateway import AIGateway
 from reality_engine.ai_gateway.domain.ports import ModelTier
+from reality_engine.ai_gateway.infrastructure.fake_embedding_provider import FakeEmbeddingProvider
 from reality_engine.ai_gateway.infrastructure.fake_provider import FakeLLMProvider
 from reality_engine.pipeline.domain.schemas import (
     ComparisonOutput,
@@ -14,6 +15,7 @@ from reality_engine.pipeline.domain.schemas import (
     GoalAlignmentScore,
     GoalsExtractionOutput,
     GoalSource,
+    MemoryOutput,
     PsychologicalReadiness,
     PsychologyOutput,
     RecommendedAction,
@@ -126,10 +128,13 @@ def _scenario(scenario_id: str, probability: float) -> Scenario:
     )
 
 
-def _full_safe_gateway() -> tuple[AIGateway, FakeLLMProvider, FakeLLMProvider, FakeLLMProvider]:
-    """Same as `_safe_gateway`, but with Agent 8's (Comparación) response
-    appended to the extraction tier and a reasoning-creative tier wired up
-    for Agents 7 (Generación de Escenarios) and 10 (Síntesis).
+def _full_safe_gateway(
+    *, embedding_provider: FakeEmbeddingProvider | None = None
+) -> tuple[AIGateway, FakeLLMProvider, FakeLLMProvider, FakeLLMProvider]:
+    """Same as `_safe_gateway`, but with Agent 8's (Comparación) and Agent
+    11's (Memoria) responses appended to the extraction tier, and a
+    reasoning-creative tier wired up for Agents 7 (Generación de
+    Escenarios) and 10 (Síntesis).
     """
     safety_provider = FakeLLMProvider(
         responses=[
@@ -169,6 +174,10 @@ def _full_safe_gateway() -> tuple[AIGateway, FakeLLMProvider, FakeLLMProvider, F
                     )
                 ]
             ),
+            MemoryOutput(
+                memory_summary="Evaluó aceptar una oferta priorizando estabilidad.",
+                embedding_ready_text="oferta laboral, estabilidad",
+            ),
         ]
     )
     reasoning_provider = FakeLLMProvider(
@@ -184,14 +193,18 @@ def _full_safe_gateway() -> tuple[AIGateway, FakeLLMProvider, FakeLLMProvider, F
             ModelTier.SAFETY_CLASSIFICATION: [safety_provider],
             ModelTier.STRUCTURED_EXTRACTION: [extraction_provider],
             ModelTier.REASONING_CREATIVE: [reasoning_provider],
-        }
+        },
+        embedding_providers=[embedding_provider] if embedding_provider else None,
     )
     return gateway, safety_provider, extraction_provider, reasoning_provider
 
 
 @pytest.mark.asyncio
-async def test_simulation_pipeline_runs_agents_7_to_10_when_safe() -> None:
-    gateway, safety_provider, extraction_provider, reasoning_provider = _full_safe_gateway()
+async def test_simulation_pipeline_runs_agents_7_to_11_when_safe() -> None:
+    embedding_provider = FakeEmbeddingProvider(responses=[[0.1, 0.2, 0.3]])
+    gateway, safety_provider, extraction_provider, reasoning_provider = _full_safe_gateway(
+        embedding_provider=embedding_provider
+    )
     pipeline = SimulationPipeline(gateway)
 
     result = await pipeline.run("¿Debo aceptar la oferta?", declared_goals=["Estabilidad"])
@@ -201,9 +214,26 @@ async def test_simulation_pipeline_runs_agents_7_to_10_when_safe() -> None:
     assert result.comparison is not None
     assert result.ranking is not None
     assert result.synthesis is not None
+    assert result.memory is not None
+    assert result.memory.embedding == [0.1, 0.2, 0.3]
     assert len(safety_provider.calls) == 1
-    assert len(extraction_provider.calls) == 7  # 6 analysis agents + Comparación
+    assert len(extraction_provider.calls) == 8  # 6 analysis agents + Comparación + Memoria
     assert len(reasoning_provider.calls) == 2  # Escenarios + Síntesis
+
+
+@pytest.mark.asyncio
+async def test_simulation_pipeline_memory_failure_does_not_fail_simulation() -> None:
+    """No embedding provider configured — Agent 11's LLM call still
+    succeeds, but `AIGateway.embed()` has nothing to call, so `memory`
+    stays None while the rest of the result is unaffected.
+    """
+    gateway, *_ = _full_safe_gateway(embedding_provider=None)
+    pipeline = SimulationPipeline(gateway)
+
+    result = await pipeline.run("¿Debo aceptar la oferta?", declared_goals=["Estabilidad"])
+
+    assert result.synthesis is not None
+    assert result.memory is None
 
 
 @pytest.mark.asyncio
@@ -234,4 +264,5 @@ async def test_simulation_pipeline_short_circuits_when_unsafe() -> None:
     assert result.analysis.safety.safe_to_proceed is False
     assert result.scenarios is None
     assert result.synthesis is None
+    assert result.memory is None
     assert reasoning_provider.calls == []

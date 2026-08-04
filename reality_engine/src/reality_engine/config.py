@@ -27,6 +27,11 @@ class Settings(BaseSettings):
     # (Generación de Escenarios) and 10 (Síntesis) — the two agents whose
     # output quality matters most, so they get the stronger model.
     openai_reasoning_model: str = "gpt-5.1"
+    # Agent 11 (Memoria). If unset, no embedding provider is configured and
+    # `AIGateway.embed()` always fails — `SimulationPipeline` treats that as
+    # "skip storing memory for this run", never as a simulation failure
+    # (see pipeline/orchestrator.py).
+    openai_embedding_model: str = "text-embedding-3-small"
 
 
 @lru_cache

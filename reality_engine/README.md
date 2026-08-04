@@ -2,7 +2,7 @@
 
 Servicio independiente del Core API (`docs/ARCHITECTURE.md §2.2`): su perfil de carga (IO-bound esperando respuestas de IA, alta latencia, necesidad de colas) es fundamentalmente distinto al del resto del backend CRUD.
 
-**Estado actual: Agentes 0-10 de 13 están implementados** — todo el pipeline salvo Memoria y Aprendizaje. `AnalysisPipeline` encadena 0-6 (`POST /v1/analyze`); `SimulationPipeline` la extiende con 7-10 (`POST /v1/simulate`) hasta producir escenarios rankeados y una síntesis. **Faltan los Agentes 11-12** (Memoria, Aprendizaje) porque necesitan el bounded context `memory` de Core API, que no existe todavía. Tampoco hay orquestador de grafo con paralelización real, workers async, ni streaming de progreso por WebSocket (todo eso descrito en `docs/ARCHITECTURE.md §2.2`) — la ejecución es secuencial.
+**Estado actual: los 13 agentes de docs/REALITY_ENGINE.md están implementados.** `AnalysisPipeline` encadena 0-6 (`POST /v1/analyze`); `SimulationPipeline` la extiende con 7-11 (`POST /v1/simulate`) hasta producir escenarios rankeados, una síntesis, y — si hay proveedor de embeddings configurado — un resumen listo para memoria semántica. El Agente 12 (Aprendizaje) vive fuera de ambos pipelines, en su propio endpoint (`POST /v1/calibrate`), porque solo corre cuando un usuario reporta qué pasó realmente con una decisión pasada, no en cada simulación. Este servicio sigue sin conocer `user_id`/`decision_id` ni llamar a Core API directamente — persistir en `memory` es responsabilidad de `simulations`' `RunSimulationUseCase` en `backend/`, que ya consume esta respuesta. Tampoco hay orquestador de grafo con paralelización real, workers async, ni streaming de progreso por WebSocket (todo eso descrito en `docs/ARCHITECTURE.md §2.2`) — la ejecución es secuencial.
 
 ## Por qué el Agente 0 primero
 
@@ -14,13 +14,13 @@ Es el único paso del pipeline que **puede terminar la ejecución anticipadament
 src/reality_engine/
   main.py, config.py        # app factory, settings (prefijo VAROS_RE_)
   ai_gateway/
-    domain/ports.py          # LLMProvider (puerto), ModelTier, LLMGenerationError
-    application/gateway.py    # AIGateway: retry + fallback entre proveedores por tier
+    domain/ports.py          # LLMProvider, EmbeddingProvider (puertos), ModelTier, *GenerationError
+    application/gateway.py    # AIGateway: retry + fallback entre proveedores por tier, y para embeddings
     infrastructure/
-      fake_provider.py         # doble de test, sin red
-      openai_provider.py        # adaptador real (Structured Outputs), probado con cliente mockeado
+      fake_provider.py, fake_embedding_provider.py   # dobles de test, sin red
+      openai_provider.py, openai_embedding_provider.py # adaptadores reales, probados con cliente mockeado
   pipeline/
-    domain/schemas.py         # contratos JSON de cada agente (Pydantic), Agentes 0-10
+    domain/schemas.py         # contratos JSON de cada agente (Pydantic), Agentes 0-12
     agents/
       safety_gate.py            # Agente 0: reglas deterministas + clasificador LLM, fail-safe
       comprehension.py           # Agente 1
@@ -33,11 +33,13 @@ src/reality_engine/
       comparison.py                   # Agente 8
       ranking.py                       # Agente 9 — función pura, sin LLM
       synthesis.py                      # Agente 10 (tier reasoning_creative, valida lenguaje no-imperativo)
+      memory.py                          # Agente 11: genera resumen + texto embebible
+      learning.py                         # Agente 12: calibración on-demand, fuera de los pipelines
       _language_guards.py               # detectores compartidos de lenguaje determinista/imperativo
-    orchestrator.py             # AnalysisPipeline (0-6) y SimulationPipeline (0-10)
-  api/                        # router FastAPI (/v1/safety-check, /v1/analyze, /v1/simulate)
+    orchestrator.py             # AnalysisPipeline (0-6) y SimulationPipeline (0-11)
+  api/                        # router FastAPI (/v1/safety-check, /v1/analyze, /v1/simulate, /v1/calibrate)
 tests/
-  unit/ai_gateway/            # retry/fallback del gateway + adaptador OpenAI mockeado
+  unit/ai_gateway/            # retry/fallback (LLM y embeddings) + adaptadores OpenAI mockeados
   unit/pipeline/               # cada agente aislado + ambos orquestadores
   integration/                  # API vía TestClient
 ```
@@ -51,6 +53,14 @@ La lista de patrones deterministas en `pipeline/agents/safety_gate.py` es un pun
 ## Decisión de diseño: guardianes lingüísticos, no reescritura silenciosa
 
 `docs/PRD.md §2` es no negociable en "nunca afirmar certeza" y "el usuario decide". Los Agentes 7 (Escenarios) y 10 (Síntesis) validan su propia salida contra listas de patrones (`pipeline/agents/_language_guards.py`) buscando lenguaje de futuro afirmativo ("serás", "pasará") o imperativo ("deberías", "debes"). Si lo encuentran, **piden al modelo que regenere** (hasta `max_language_retries` veces) — nunca reescriben o recortan el texto del modelo por su cuenta. Si el lenguaje problemático persiste, el agente falla con `LLMGenerationError` en vez de servir un resultado que viole el principio del producto. Misma lógica de humildad que en Agente 0: listas curadas, no un clasificador lingüístico riguroso.
+
+## Decisión de diseño: Memoria es una mejora, nunca un motivo de fallo
+
+Si el Agente 11 falla, o no hay proveedor de embeddings configurado, `SimulationPipeline` captura el error y deja `memory: null` en la respuesta — la simulación completa (escenarios, comparación, ranking, síntesis) se entrega igual. Guardar memoria semántica es una capa encima de una simulación exitosa, no una precondición de ella (ver `SimulationPipeline._try_build_memory` en `pipeline/orchestrator.py`).
+
+## Decisión de diseño: Aprendizaje vive fuera del pipeline
+
+El Agente 12 no corre en cada `/v1/simulate` — se dispara explícitamente vía `POST /v1/calibrate` cuando un usuario cierra el ciclo de una decisión pasada (`docs/PRD.md`, CU8). Este servicio no conoce `user_id`/`decision_id` ni guarda estado entre llamadas: el caller (Core API) le manda `reported_outcome` + los escenarios/ranking originales (reconstruidos desde lo que ya tiene persistido) y recibe de vuelta el análisis de calibración para que Core API decida qué persistir en `memory`.
 
 ## Desarrollo local
 

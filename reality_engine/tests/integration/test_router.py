@@ -111,6 +111,61 @@ def test_simulate_rejects_empty_input() -> None:
     assert response.status_code == 422
 
 
+def _three_scenarios() -> list[dict[str, object]]:
+    return [
+        {
+            "id": f"s{i}",
+            "title": f"Escenario {i}",
+            "narrative": "Podrías crecer profesionalmente.",
+            "relative_probability": 33.3,
+            "time_horizon_months": 12,
+        }
+        for i in range(3)
+    ]
+
+
+def test_calibrate_without_configured_provider_returns_503() -> None:
+    with TestClient(create_app()) as client:
+        response = client.post(
+            "/v1/calibrate",
+            json={
+                "reported_outcome": "Acepté y me tomó 3 meses adaptarme",
+                "original_scenarios": _three_scenarios(),
+                "original_ranking": [],
+            },
+        )
+
+    assert response.status_code == 503
+
+
+def test_calibrate_rejects_too_few_scenarios() -> None:
+    with TestClient(create_app()) as client:
+        response = client.post(
+            "/v1/calibrate",
+            json={
+                "reported_outcome": "algo",
+                "original_scenarios": _three_scenarios()[:2],
+                "original_ranking": [],
+            },
+        )
+
+    assert response.status_code == 422
+
+
+def test_calibrate_rejects_empty_outcome() -> None:
+    with TestClient(create_app()) as client:
+        response = client.post(
+            "/v1/calibrate",
+            json={
+                "reported_outcome": "",
+                "original_scenarios": _three_scenarios(),
+                "original_ranking": [],
+            },
+        )
+
+    assert response.status_code == 422
+
+
 def test_healthz_is_public() -> None:
     with TestClient(create_app()) as client:
         response = client.get("/healthz")

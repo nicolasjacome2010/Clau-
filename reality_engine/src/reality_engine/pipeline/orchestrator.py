@@ -1,9 +1,7 @@
-"""Sequential orchestrator wiring the full implemented pipeline, Agents 0-10
-(docs/REALITY_ENGINE.md §1).
-
-Agents 11-12 (Memoria, Aprendizaje) are not implemented yet — they need the
-`memory` bounded context in Core API, which doesn't exist, see
-reality_engine/README.md for what's left.
+"""Sequential orchestrator wiring the full implemented pipeline, Agents 0-11
+(docs/REALITY_ENGINE.md §1). Agent 12 (Aprendizaje) is deliberately not
+wired in here — see `pipeline/agents/learning.py`'s docstring: it runs
+on-demand from `POST /v1/calibrate`, never as part of a simulation run.
 
 Execution is sequential for now, even though the spec notes some agents can
 partially parallelize once their data dependencies are met (e.g. Riesgos
@@ -18,10 +16,12 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 from reality_engine.ai_gateway.application.gateway import AIGateway
+from reality_engine.ai_gateway.domain.ports import EmbeddingGenerationError, LLMGenerationError
 from reality_engine.pipeline.agents.comparison import ComparisonAgent
 from reality_engine.pipeline.agents.comprehension import ComprehensionAgent
 from reality_engine.pipeline.agents.emotions import EmotionsAgent
 from reality_engine.pipeline.agents.goals_extraction import GoalsExtractionAgent
+from reality_engine.pipeline.agents.memory import MemoryAgent
 from reality_engine.pipeline.agents.psychology import PsychologyAgent
 from reality_engine.pipeline.agents.ranking import RankingAgent
 from reality_engine.pipeline.agents.risk_analysis import RiskAnalysisAgent
@@ -56,11 +56,25 @@ class AnalysisResult(BaseModel):
     risks: RiskAnalysisOutput | None = None
 
 
+class SimulationMemoryResult(BaseModel):
+    """Agent 11's output plus the embedding computed from it — the whole
+    payload Core API's `memory` module needs to persist a `MemoryEmbedding`
+    (see docs/DATABASE.md §2.11).
+    """
+
+    summary_text: str
+    embedding: list[float]
+
+
 class SimulationResult(BaseModel):
-    """Agents 0-10 — the full simulation as far as this service goes today.
+    """Agents 0-11 — the full simulation as far as this service goes today.
 
     `scenarios`/`comparison`/`ranking`/`synthesis` stay `None` whenever the
-    analysis half didn't clear Agent 0 as safe to proceed.
+    analysis half didn't clear Agent 0 as safe to proceed. `memory` stays
+    `None` either for that same reason, or — deliberately — whenever Agent
+    11 or the embedding call fails: storing a memory is an enhancement on
+    top of a completed simulation, never a reason to fail the simulation
+    itself (see `SimulationPipeline.run`).
     """
 
     analysis: AnalysisResult
@@ -68,6 +82,7 @@ class SimulationResult(BaseModel):
     comparison: ComparisonOutput | None = None
     ranking: RankingOutput | None = None
     synthesis: SynthesisOutput | None = None
+    memory: SimulationMemoryResult | None = None
 
 
 class AnalysisPipeline:
@@ -112,16 +127,18 @@ class AnalysisPipeline:
 
 class SimulationPipeline:
     """Runs `AnalysisPipeline` (Agents 0-6), then — only if it cleared
-    Agent 0 as safe — continues through Agents 7-10 to produce the full
-    ranked, synthesized result.
+    Agent 0 as safe — continues through Agents 7-11 to produce the full
+    ranked, synthesized result plus a storable memory.
     """
 
     def __init__(self, ai_gateway: AIGateway) -> None:
+        self._gateway = ai_gateway
         self._analysis = AnalysisPipeline(ai_gateway)
         self._scenarios = ScenarioGenerationAgent(ai_gateway)
         self._comparison = ComparisonAgent(ai_gateway)
         self._ranking = RankingAgent()
         self._synthesis = SynthesisAgent(ai_gateway)
+        self._memory = MemoryAgent(ai_gateway)
 
     async def run(
         self, raw_input: str, *, declared_goals: list[str] | None = None
@@ -147,6 +164,7 @@ class SimulationPipeline:
         synthesis = await self._synthesis.run(
             ranking, comparison, analysis.psychology, analysis.emotions
         )
+        memory = await self._try_build_memory(analysis, ranking)
 
         return SimulationResult(
             analysis=analysis,
@@ -154,4 +172,22 @@ class SimulationPipeline:
             comparison=comparison,
             ranking=ranking,
             synthesis=synthesis,
+            memory=memory,
+        )
+
+    async def _try_build_memory(
+        self, analysis: AnalysisResult, ranking: RankingOutput
+    ) -> SimulationMemoryResult | None:
+        assert analysis.summary is not None
+        assert analysis.goals is not None
+        assert analysis.psychology is not None
+        try:
+            memory_output = await self._memory.run(
+                analysis.summary.summary, analysis.goals, analysis.psychology, ranking
+            )
+            embedding = await self._gateway.embed(memory_output.embedding_ready_text)
+        except (LLMGenerationError, EmbeddingGenerationError):
+            return None
+        return SimulationMemoryResult(
+            summary_text=memory_output.memory_summary, embedding=embedding
         )

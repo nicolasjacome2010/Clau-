@@ -6,6 +6,12 @@ configured with an ordered list of providers — the first is primary, the
 rest are fallbacks tried only if every retry against the current one is
 exhausted (e.g. OpenAI primary, Anthropic fallback for
 `REASONING_CREATIVE`, per docs/ARCHITECTURE.md §2.6).
+
+Embeddings get the same retry/fallback treatment as structured generation
+(CLAUDE.md: "Never call a model provider's SDK directly from a pipeline
+agent") — a single ordered list of `EmbeddingProvider`s, since today there
+is realistically one embedding provider, but the shape stays consistent
+with the LLM side rather than special-cased.
 """
 
 from __future__ import annotations
@@ -14,7 +20,13 @@ from typing import TypeVar
 
 from pydantic import BaseModel
 
-from reality_engine.ai_gateway.domain.ports import LLMGenerationError, LLMProvider, ModelTier
+from reality_engine.ai_gateway.domain.ports import (
+    EmbeddingGenerationError,
+    EmbeddingProvider,
+    LLMGenerationError,
+    LLMProvider,
+    ModelTier,
+)
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -25,9 +37,11 @@ class AIGateway:
         providers_by_tier: dict[ModelTier, list[LLMProvider]],
         *,
         retries_per_provider: int = 1,
+        embedding_providers: list[EmbeddingProvider] | None = None,
     ) -> None:
         self._providers_by_tier = providers_by_tier
         self._retries_per_provider = retries_per_provider
+        self._embedding_providers = embedding_providers or []
 
     async def generate_structured(
         self,
@@ -57,3 +71,18 @@ class AIGateway:
         raise LLMGenerationError(
             f"All providers exhausted for tier '{tier.value}'"
         ) from last_error
+
+    async def embed(self, text: str) -> list[float]:
+        if not self._embedding_providers:
+            raise EmbeddingGenerationError("No embedding provider configured")
+
+        last_error: Exception | None = None
+        for provider in self._embedding_providers:
+            for _attempt in range(self._retries_per_provider + 1):
+                try:
+                    return await provider.embed(text)
+                except EmbeddingGenerationError as exc:
+                    last_error = exc
+                    continue
+
+        raise EmbeddingGenerationError("All embedding providers exhausted") from last_error

@@ -136,8 +136,13 @@ class RiskAnalysisOutput(BaseModel):
 class Scenario(BaseModel):
     id: str
     title: str
-    based_on_option: str
     narrative: str
+    # Optional: Agent 7 always sets it when generating fresh scenarios, but
+    # Core API's `simulations` module doesn't persist it (see
+    # docs/DATABASE.md §2.7 — not one of the stored columns), so it must
+    # have a default to let /v1/calibrate reconstruct a `Scenario` from
+    # historical data that never had it.
+    based_on_option: str = ""
     assumptions: list[str] = Field(default_factory=list)
     relative_probability: float = Field(ge=0, le=100)
     time_horizon_months: int = Field(ge=1, le=60)
@@ -190,3 +195,29 @@ class SynthesisOutput(BaseModel):
 
     synthesis: str = Field(max_length=1800)  # ~250 words, generous character ceiling
     reflective_question: str
+
+
+class MemoryOutput(BaseModel):
+    """docs/REALITY_ENGINE.md §2, Agente 11 — Memoria.
+
+    The embedding vector itself is computed separately by
+    `AIGateway.embed(embedding_ready_text)` — kept out of this model since
+    it isn't something the LLM produces.
+    """
+
+    memory_summary: str = Field(max_length=450)  # ~60 words
+    embedding_ready_text: str
+
+
+class CalibrationOutput(BaseModel):
+    """docs/REALITY_ENGINE.md §2, Agente 12 — Aprendizaje.
+
+    `closest_scenario_id` is nullable: docs/REALITY_ENGINE.md §2 documents
+    `outcome_does_not_match_any_scenario` as a legitimate, valuable result
+    (a "blind spot") — never forced into a false match.
+    """
+
+    closest_scenario_id: str | None = None
+    calibration_delta: float = Field(ge=-100, le=100)
+    system_errors_identified: list[str] = Field(default_factory=list)
+    user_bias_profile_update: dict[str, float] = Field(default_factory=dict)
