@@ -30,3 +30,21 @@ class NoCompletedSimulationError(SimulationsDomainError):
     def __init__(self, decision_id: UUID) -> None:
         self.decision_id = decision_id
         super().__init__(f"Decision {decision_id} has no completed simulation to report against")
+
+
+class DecisionOutcomeAlreadyReportedError(SimulationsDomainError):
+    """Raised when a decision's loop has already been closed.
+
+    A Decision has at most one reported outcome (docs/DATABASE.md §2.9),
+    and closing the loop is not an idempotent read: each report feeds
+    Agent 12 and folds another observation into the user's
+    `UserBiasProfile` (`with_calibration_delta` / `with_bias_observation`
+    are both incremental). Letting the same outcome be reported twice
+    would therefore double-count it against the user's own calibration —
+    a silent corruption of the product's core learning artifact, not a
+    harmless duplicate row.
+    """
+
+    def __init__(self, decision_id: UUID) -> None:
+        self.decision_id = decision_id
+        super().__init__(f"Decision {decision_id} already has a reported outcome")

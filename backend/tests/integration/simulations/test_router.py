@@ -216,3 +216,61 @@ def test_report_decision_outcome_without_completed_simulation_returns_409(
     )
 
     assert response.status_code == 409
+
+
+def test_report_decision_outcome_twice_returns_409(client: TestClient) -> None:
+    decision_id = _create_decision(client)
+    client.post(f"/v1/decisions/{decision_id}/simulations", headers=AUTH)
+    payload = {"reported_outcome": "Acepté la oferta y me fue bien."}
+
+    first = client.post(f"/v1/decisions/{decision_id}/outcome", headers=AUTH, json=payload)
+    second = client.post(f"/v1/decisions/{decision_id}/outcome", headers=AUTH, json=payload)
+
+    assert first.status_code == 201
+    assert second.status_code == 409
+    assert client.get("/v1/outcomes", headers=AUTH).json() == [first.json()]
+
+
+def test_list_outcomes_returns_the_callers_closed_loops(client: TestClient) -> None:
+    decision_id = _create_decision(client)
+    client.post(f"/v1/decisions/{decision_id}/simulations", headers=AUTH)
+    client.post(
+        f"/v1/decisions/{decision_id}/outcome",
+        headers=AUTH,
+        json={"reported_outcome": "Acepté la oferta y me fue bien."},
+    )
+
+    response = client.get("/v1/outcomes", headers=AUTH)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 1
+    assert body[0]["decision_id"] == decision_id
+
+
+def test_list_outcomes_does_not_leak_another_users_outcomes(client: TestClient) -> None:
+    decision_id = _create_decision(client)
+    client.post(f"/v1/decisions/{decision_id}/simulations", headers=AUTH)
+    client.post(
+        f"/v1/decisions/{decision_id}/outcome",
+        headers=AUTH,
+        json={"reported_outcome": "Acepté la oferta y me fue bien."},
+    )
+
+    response = client.get("/v1/outcomes", headers={"Authorization": "Bearer other-token"})
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_list_outcomes_is_empty_before_any_loop_is_closed(client: TestClient) -> None:
+    _create_decision(client)
+
+    response = client.get("/v1/outcomes", headers=AUTH)
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_list_outcomes_requires_authentication(client: TestClient) -> None:
+    assert client.get("/v1/outcomes").status_code == 401

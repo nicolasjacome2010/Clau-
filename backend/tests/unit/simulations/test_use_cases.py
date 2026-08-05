@@ -13,6 +13,7 @@ from core_api.decisions.domain.exceptions import DecisionNotFoundError
 from core_api.goals.domain.entities import Goal
 from core_api.simulations.application.use_cases import (
     GetSimulationUseCase,
+    ListDecisionOutcomesUseCase,
     ListSimulationsForDecisionUseCase,
     ReportDecisionOutcomeInput,
     ReportDecisionOutcomeUseCase,
@@ -21,6 +22,7 @@ from core_api.simulations.application.use_cases import (
 )
 from core_api.simulations.domain.entities import SimulationStatus
 from core_api.simulations.domain.exceptions import (
+    DecisionOutcomeAlreadyReportedError,
     NoCompletedSimulationError,
     SimulationNotFoundError,
 )
@@ -451,3 +453,77 @@ async def test_report_decision_outcome_raises_when_no_completed_simulation() -> 
                 reported_outcome="x",
             )
         )
+
+
+@pytest.mark.asyncio
+async def test_report_decision_outcome_rejects_a_second_report() -> None:
+    decisions, simulations, outcomes, profiles, _, decision, user_id = (
+        await _completed_simulation_setup()
+    )
+    reality_engine = FakeRealityEngineClient(calibrate_responses=[_calibration_outcome()])
+
+    use_case = ReportDecisionOutcomeUseCase(
+        decisions, simulations, outcomes, profiles, reality_engine
+    )
+    await use_case.execute(
+        ReportDecisionOutcomeInput(
+            decision_id=decision.id,
+            requesting_user_id=user_id,  # type: ignore[arg-type]
+            reported_outcome="Acepté la oferta.",
+        )
+    )
+    profile_after_first = await profiles.get_by_user_id(user_id)  # type: ignore[arg-type]
+    assert profile_after_first is not None
+
+    with pytest.raises(DecisionOutcomeAlreadyReportedError):
+        await use_case.execute(
+            ReportDecisionOutcomeInput(
+                decision_id=decision.id,
+                requesting_user_id=user_id,  # type: ignore[arg-type]
+                reported_outcome="Acepté la oferta.",
+            )
+        )
+
+    # The guard runs before the Reality Engine call, so a rejected duplicate
+    # costs neither an LLM round trip nor a second fold into the profile —
+    # the whole reason it isn't just a database constraint.
+    assert len(reality_engine.calibrate_calls) == 1
+    profile_after_second = await profiles.get_by_user_id(user_id)  # type: ignore[arg-type]
+    assert profile_after_second is not None
+    assert profile_after_second.calibration_score == profile_after_first.calibration_score
+
+
+@pytest.mark.asyncio
+async def test_list_decision_outcomes_returns_only_the_callers_outcomes() -> None:
+    decisions, simulations, outcomes, profiles, _, decision, user_id = (
+        await _completed_simulation_setup()
+    )
+    reality_engine = FakeRealityEngineClient(calibrate_responses=[_calibration_outcome()])
+    await ReportDecisionOutcomeUseCase(
+        decisions, simulations, outcomes, profiles, reality_engine
+    ).execute(
+        ReportDecisionOutcomeInput(
+            decision_id=decision.id,
+            requesting_user_id=user_id,  # type: ignore[arg-type]
+            reported_outcome="Acepté la oferta.",
+        )
+    )
+
+    use_case = ListDecisionOutcomesUseCase(decisions, outcomes)
+
+    mine = await use_case.execute(user_id)  # type: ignore[arg-type]
+    assert [o.decision_id for o in mine] == [decision.id]
+
+    # Another user's listing must not leak it, even though both rows live in
+    # the same table and outcomes carry no user_id of their own.
+    assert await use_case.execute(uuid4()) == []
+
+
+@pytest.mark.asyncio
+async def test_list_decision_outcomes_is_empty_before_any_loop_is_closed() -> None:
+    decisions = InMemoryDecisionRepository()
+    outcomes = InMemoryDecisionOutcomeRepository()
+    user_id = uuid4()
+    await _make_draft_decision(decisions, user_id)
+
+    assert await ListDecisionOutcomesUseCase(decisions, outcomes).execute(user_id) == []

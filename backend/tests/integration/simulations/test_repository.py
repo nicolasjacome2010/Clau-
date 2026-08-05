@@ -5,6 +5,7 @@ from uuid import uuid4
 
 import pytest
 from cryptography.fernet import Fernet
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core_api.crypto import FernetFieldEncryptor
@@ -191,3 +192,63 @@ async def test_get_by_decision_id_returns_none_when_missing(sqlite_session: Asyn
     outcome_repo = SqlAlchemyDecisionOutcomeRepository(sqlite_session)
 
     assert await outcome_repo.get_by_decision_id(uuid4()) is None
+
+
+@pytest.mark.asyncio
+async def test_list_for_decisions_returns_only_the_requested_ones(
+    sqlite_session: AsyncSession,
+) -> None:
+    mine = await _make_decision(sqlite_session)
+    someone_elses = await _make_decision(sqlite_session)
+    outcome_repo = SqlAlchemyDecisionOutcomeRepository(sqlite_session)
+    now = datetime.now(UTC)
+    for decision in (mine, someone_elses):
+        await outcome_repo.create(
+            DecisionOutcome(
+                id=uuid4(),
+                decision_id=decision.id,
+                reported_outcome="pasó esto",
+                closest_scenario_id=None,
+                calibration_delta=0.0,
+                system_errors_identified=[],
+                reported_at=now,
+            )
+        )
+
+    found = await outcome_repo.list_for_decisions([mine.id])
+
+    assert [o.decision_id for o in found] == [mine.id]
+
+
+@pytest.mark.asyncio
+async def test_list_for_decisions_with_no_ids_does_not_query(
+    sqlite_session: AsyncSession,
+) -> None:
+    outcome_repo = SqlAlchemyDecisionOutcomeRepository(sqlite_session)
+
+    assert await outcome_repo.list_for_decisions([]) == []
+
+
+@pytest.mark.asyncio
+async def test_a_decision_cannot_have_two_outcomes(sqlite_session: AsyncSession) -> None:
+    # The use case guards this too, but the constraint is what holds when
+    # two concurrent reports both pass that guard.
+    decision = await _make_decision(sqlite_session)
+    outcome_repo = SqlAlchemyDecisionOutcomeRepository(sqlite_session)
+    now = datetime.now(UTC)
+
+    def _outcome() -> DecisionOutcome:
+        return DecisionOutcome(
+            id=uuid4(),
+            decision_id=decision.id,
+            reported_outcome="pasó esto",
+            closest_scenario_id=None,
+            calibration_delta=0.0,
+            system_errors_identified=[],
+            reported_at=now,
+        )
+
+    await outcome_repo.create(_outcome())
+
+    with pytest.raises(IntegrityError):
+        await outcome_repo.create(_outcome())

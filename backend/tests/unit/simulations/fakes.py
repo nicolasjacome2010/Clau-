@@ -4,6 +4,7 @@ by unit tests.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from uuid import UUID
 
 from core_api.simulations.domain.entities import DecisionOutcome, Simulation
@@ -41,6 +42,10 @@ class InMemoryDecisionOutcomeRepository(DecisionOutcomeRepository):
         return next(
             (o for o in self._outcomes.values() if o.decision_id == decision_id), None
         )
+
+    async def list_for_decisions(self, decision_ids: Sequence[UUID]) -> list[DecisionOutcome]:
+        wanted = set(decision_ids)
+        return [o for o in self._outcomes.values() if o.decision_id in wanted]
 
     async def create(self, outcome: DecisionOutcome) -> DecisionOutcome:
         self._outcomes[outcome.id] = outcome

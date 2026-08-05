@@ -36,6 +36,7 @@ from core_api.simulations.api.schemas import (
 )
 from core_api.simulations.application.use_cases import (
     GetSimulationUseCase,
+    ListDecisionOutcomesUseCase,
     ListSimulationsForDecisionUseCase,
     ReportDecisionOutcomeInput,
     ReportDecisionOutcomeUseCase,
@@ -44,6 +45,7 @@ from core_api.simulations.application.use_cases import (
 )
 from core_api.simulations.domain.entities import DecisionOutcome, Simulation
 from core_api.simulations.domain.exceptions import (
+    DecisionOutcomeAlreadyReportedError,
     NoCompletedSimulationError,
     SimulationNotFoundError,
 )
@@ -163,6 +165,28 @@ def _to_outcome_response(outcome: DecisionOutcome) -> DecisionOutcomeResponse:
     )
 
 
+@router.get("/outcomes", response_model=list[DecisionOutcomeResponse])
+async def list_decision_outcomes(
+    identity: Annotated[AuthenticatedIdentity, Depends(get_current_identity)],
+    decision_repository: Annotated[DecisionRepository, Depends(get_decision_repository)],
+    decision_outcome_repository: Annotated[
+        DecisionOutcomeRepository, Depends(get_decision_outcome_repository)
+    ],
+) -> list[DecisionOutcomeResponse]:
+    """Every loop the caller has already closed.
+
+    Deliberately a collection endpoint rather than
+    `GET /decisions/{id}/outcome`: the client's actual question is "which
+    of my decisions are still open?", and answering that one decision at a
+    time would be an N+1 against a list screen (docs/UX_DESIGN.md Pantalla
+    10). A per-decision read is a filter over this response, not another
+    round trip.
+    """
+    use_case = ListDecisionOutcomesUseCase(decision_repository, decision_outcome_repository)
+    outcomes = await use_case.execute(identity.id)
+    return [_to_outcome_response(outcome) for outcome in outcomes]
+
+
 @router.post(
     "/decisions/{decision_id}/outcome",
     response_model=DecisionOutcomeResponse,
@@ -205,6 +229,11 @@ async def report_decision_outcome(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Decision has no completed simulation to report against",
+        ) from exc
+    except DecisionOutcomeAlreadyReportedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Decision outcome has already been reported",
         ) from exc
     except RealityEngineError as exc:
         raise HTTPException(

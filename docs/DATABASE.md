@@ -157,7 +157,7 @@ Feedback de "cierre de ciclo" (CU8) — lo que realmente pasó, usado por el Age
 | Columna | Tipo | Notas |
 |---|---|---|
 | id (PK) | uuid | |
-| decision_id (FK) | uuid | |
+| decision_id (FK) | uuid | **único** — a lo sumo un cierre de ciclo por decisión (migración 0008). No es una duplicación inocua: cada outcome pliega otra observación en `user_bias_profile`, así que reportar dos veces distorsionaría la calibración del propio usuario |
 | reported_outcome | text | |
 | closest_scenario_id (FK simulation_scenarios) | uuid, null | |
 | calibration_delta | numeric(5,2) | |

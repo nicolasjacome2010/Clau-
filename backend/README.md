@@ -27,12 +27,13 @@ src/core_api/
     domain/reality_engine_port.py   # puerto + DTOs propios — nunca importa tipos de reality_engine/
     domain/                          # Simulation, SimulationScenario, DecisionOutcome (inmutables)
     application/                      # RunSimulationUseCase (decisions+goals+Reality Engine, guarda
-                                        # memoria semántica si el Agente 11 la produjo) y
+                                        # memoria semántica si el Agente 11 la produjo),
                                         # ReportDecisionOutcomeUseCase (cierra el ciclo vía Agente 12)
+                                        # y ListDecisionOutcomesUseCase (qué ciclos ya se cerraron)
     infrastructure/
       reality_engine_client.py         # adaptador HTTP real: /v1/simulate y /v1/calibrate
     api/                              # /v1/decisions/{id}/simulations, /v1/simulations/{id},
-                                        # /v1/decisions/{id}/outcome
+                                        # /v1/decisions/{id}/outcome, /v1/outcomes
   memory/
     domain/similarity.py             # cosine_similarity puro, sin numpy
     domain/                           # UserBiasProfile (media móvil ponderada), MemoryEmbedding
@@ -48,7 +49,8 @@ src/core_api/
       stripe_client.py                 # adaptador real (stripe.StripeClient, *_async — no bloquea el loop)
     api/                              # /v1/billing/subscription, /checkout-session, /portal-session, /webhook
 migrations/                 # Alembic (async) — 0001 identity, 0002 goals, 0003 decisions,
-                             # 0004 simulations, 0005 memory, 0006 decision_outcomes, 0007 billing
+                             # 0004 simulations, 0005 memory, 0006 decision_outcomes, 0007 billing,
+                             # 0008 unicidad de decision_outcomes.decision_id
 tests/
   unit/                     # Casos de uso contra fakes en memoria
   integration/               # Repositorios contra SQLite real + API contra TestClient
@@ -70,7 +72,7 @@ uvicorn core_api.main:app --reload
 
 `simulations` necesita el servicio `reality_engine/` corriendo y alcanzable en `VAROS_REALITY_ENGINE_BASE_URL` (por defecto `http://localhost:8100`) para que `POST /v1/decisions/{id}/simulations` funcione — sin `OPENAI_API_KEY` configurada ahí, el Reality Engine sigue respondiendo pero siempre falla seguro (`HALT_AND_REFER`), así que la simulación se crea igual, con `status=partial`.
 
-Cuando una simulación se completa y el Reality Engine incluyó un resumen de memoria (Agente 11), `RunSimulationUseCase` lo persiste automáticamente en `memory` — sin bloquear la simulación si el Reality Engine no lo produjo. `POST /v1/decisions/{id}/outcome` cierra el ciclo (docs/PRD.md CU8): reenvía los escenarios de la última simulación completada al Reality Engine (`/v1/calibrate`, Agente 12) junto con lo que el usuario reporta que pasó realmente, y persiste tanto el `DecisionOutcome` como el efecto en `UserBiasProfile`.
+Cuando una simulación se completa y el Reality Engine incluyó un resumen de memoria (Agente 11), `RunSimulationUseCase` lo persiste automáticamente en `memory` — sin bloquear la simulación si el Reality Engine no lo produjo. `POST /v1/decisions/{id}/outcome` cierra el ciclo (docs/PRD.md CU8): reenvía los escenarios de la última simulación completada al Reality Engine (`/v1/calibrate`, Agente 12) junto con lo que el usuario reporta que pasó realmente, y persiste tanto el `DecisionOutcome` como el efecto en `UserBiasProfile`. **Un ciclo se cierra una sola vez**: reportar de nuevo devuelve 409 y la comprobación corre *antes* de llamar al Reality Engine, así que un duplicado no gasta una llamada al modelo ni pliega dos veces la misma observación en el perfil de sesgos del usuario; `decision_outcomes.decision_id` es además único en la base (migración 0008), que es lo único que sostiene el invariante si dos reportes concurrentes pasan la guardia a la vez. `GET /v1/outcomes` devuelve todos los cierres de ciclo del caller en una sola llamada — es una colección y no `GET /decisions/{id}/outcome` porque la pregunta real del cliente es "¿cuáles de mis decisiones siguen abiertas?", y responderla de a una sería un N+1 contra una pantalla de lista (docs/UX_DESIGN.md Pantalla 10).
 
 `billing` necesita `VAROS_STRIPE_SECRET_KEY`/`VAROS_STRIPE_WEBHOOK_SECRET` (ver `.env.example`) para crear sesiones de Checkout/Customer Portal reales y para verificar la firma de los webhooks — sin ellos, `/v1/billing/checkout-session` y `/v1/billing/portal-session` devuelven 503, y `/v1/billing/webhook` rechaza todo con 400 (fail-closed, no fail-open, misma postura que el Safety Gate del Reality Engine). Stripe es la fuente de verdad del estado de suscripción (docs/ARCHITECTURE.md §9): `Subscription` es una réplica de solo lectura que solo `HandleStripeWebhookEventUseCase` escribe, y `stripe_events` es un log append-only de idempotencia — un evento reenviado por Stripe (reintenta hasta recibir 2xx) es un no-op, nunca se reaplica.
 

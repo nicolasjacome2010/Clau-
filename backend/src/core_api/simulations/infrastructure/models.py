@@ -71,8 +71,12 @@ class DecisionOutcomeModel(Base):
     __tablename__ = "decision_outcomes"
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+    # Unique, not merely indexed: "at most one outcome per decision"
+    # (docs/DATABASE.md §2.9) is an invariant, and the use case's guard
+    # can still lose a race between two concurrent reports. The database
+    # is the only place that can't be bypassed.
     decision_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("decisions.id", ondelete="CASCADE"), index=True
+        ForeignKey("decisions.id", ondelete="CASCADE"), index=True, unique=True
     )
     reported_outcome: Mapped[str] = mapped_column(String)
     closest_scenario_id: Mapped[uuid.UUID | None] = mapped_column(

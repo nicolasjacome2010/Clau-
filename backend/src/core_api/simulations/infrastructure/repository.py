@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from uuid import UUID
 
 from sqlalchemy import select
@@ -131,6 +132,18 @@ class SqlAlchemyDecisionOutcomeRepository(DecisionOutcomeRepository):
         )
         model = result.scalars().first()
         return _to_outcome_entity(model) if model else None
+
+    async def list_for_decisions(self, decision_ids: Sequence[UUID]) -> list[DecisionOutcome]:
+        if not decision_ids:
+            # `IN ()` is a syntax error in some dialects and always an empty
+            # result in the rest — skip the round trip entirely.
+            return []
+        result = await self._session.execute(
+            select(DecisionOutcomeModel).where(
+                DecisionOutcomeModel.decision_id.in_(decision_ids)
+            )
+        )
+        return [_to_outcome_entity(model) for model in result.scalars().all()]
 
     async def create(self, outcome: DecisionOutcome) -> DecisionOutcome:
         model = DecisionOutcomeModel(

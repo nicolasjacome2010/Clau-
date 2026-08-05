@@ -33,6 +33,7 @@ from core_api.simulations.domain.entities import (
     SimulationStatus,
 )
 from core_api.simulations.domain.exceptions import (
+    DecisionOutcomeAlreadyReportedError,
     NoCompletedSimulationError,
     SimulationNotFoundError,
 )
@@ -249,6 +250,14 @@ class ReportDecisionOutcomeUseCase:
         if decision is None or decision.user_id != data.requesting_user_id:
             raise DecisionNotFoundError(data.decision_id)
 
+        # Checked before anything expensive happens: an already-closed loop
+        # must not spend a Reality Engine call, and must never fold a second
+        # copy of the same observation into the user's bias profile (see
+        # `DecisionOutcomeAlreadyReportedError`).
+        existing = await self._outcomes.get_by_decision_id(data.decision_id)
+        if existing is not None:
+            raise DecisionOutcomeAlreadyReportedError(data.decision_id)
+
         simulations = await self._simulations.list_for_decision(data.decision_id)
         completed = [s for s in simulations if s.status == SimulationStatus.COMPLETED]
         if not completed:
@@ -318,3 +327,32 @@ class ReportDecisionOutcomeUseCase:
         await self._profiles.upsert(updated_profile)
 
         return outcome
+
+
+class ListDecisionOutcomesUseCase:
+    """Every closed loop belonging to the caller, in two queries.
+
+    This exists so a client can tell which of its decisions have already
+    been closed *without* asking per decision: the only alternative the API
+    offered was `POST .../outcome`, which reports rather than reads, so a
+    UI wanting that state had no honest way to get it (docs/UX_DESIGN.md
+    Pantalla 10's ">60 días sin cerrar el ciclo" indicator, and Pantalla
+    11's own prompt).
+
+    Ownership is resolved here, in the use case, rather than by joining
+    `decisions` from inside `DecisionOutcomeRepository` — same rule as
+    `RunSimulationUseCase`: cross-context coupling is visible at the
+    constructor, never hidden inside a repository.
+    """
+
+    def __init__(
+        self,
+        decision_repository: DecisionRepository,
+        decision_outcome_repository: DecisionOutcomeRepository,
+    ) -> None:
+        self._decisions = decision_repository
+        self._outcomes = decision_outcome_repository
+
+    async def execute(self, requesting_user_id: UUID) -> list[DecisionOutcome]:
+        decisions = await self._decisions.list_for_user(requesting_user_id)
+        return await self._outcomes.list_for_decisions([d.id for d in decisions])
