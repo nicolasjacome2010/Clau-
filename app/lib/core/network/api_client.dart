@@ -13,10 +13,10 @@ const String apiBaseUrl = String.fromEnvironment(
 ///
 /// Deliberately a plain provider here, not an import of `features/auth`:
 /// `core/` must never depend on a feature (layering runs one way — features
-/// depend on core). `features/auth`'s session controller overrides this
-/// provider once a real session exists; until then requests simply carry no
-/// `Authorization` header, which is correct for the pre-auth "probar antes
-/// de registrarse" flow (docs/UX_DESIGN.md, Pantalla 3).
+/// depend on core). `main.dart` overrides it with `features/auth`'s
+/// `sessionControllerProvider`, so the wiring lives at the composition
+/// root. Unoverridden — in a widget test, or before any session exists —
+/// requests simply carry no `Authorization` header.
 final accessTokenProvider = Provider<String?>((ref) => null);
 
 final dioProvider = Provider<Dio>((ref) {
@@ -44,11 +44,12 @@ class _AuthInterceptor extends Interceptor {
     handler.next(options);
   }
 
-  // Automatic refresh-on-401 is intentionally not implemented yet: it
-  // depends on `features/auth` wiring a real Supabase session (refresh
-  // token, expiry), which this first increment doesn't have. Documented
-  // gap, not an oversight — same posture as `simulations/infrastructure/
-  // reality_engine_client.py`'s "no queue yet" docstring on the backend.
+  // There is no refresh-on-401 retry here, and there shouldn't be: the
+  // Supabase SDK refreshes the session in the background and pushes the new
+  // token through `AuthRepository.accessTokenChanges`, so every request
+  // already reads the current one. Re-implementing refresh at this layer
+  // would race with the SDK's own, and two components refreshing the same
+  // token is how refresh-token reuse detection gets tripped.
 }
 
 /// Stand-in for structured logging (backend uses `structlog`,

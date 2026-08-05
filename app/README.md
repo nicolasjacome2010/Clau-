@@ -26,10 +26,13 @@ lib/
       domain/                   # OnboardingRepository (puerto). La lista semilla de objetivos
                                  # vive en goals/, que Perfil de Objetivos también usa
       presentation/               # OnboardingController (Notifier) + screens/ + widgets/
-    auth/                      # Pantalla 3 — email/OAuth + "probar sin cuenta"
+    auth/                      # Pantalla 3 — magic link + "probar sin cuenta", REAL
       domain/auth_repository.dart # puerto — nunca se llama a Supabase directo desde la UI
-      data/local_stub_auth_repository.dart # adaptador interino, ver su docstring
+      data/supabase_auth_repository.dart # adaptador real (probado contra un http.Client falso)
+      data/supabase_config.dart          # credenciales por --dart-define + isSupabaseConfigured
+      data/local_stub_auth_repository.dart # binding sin credenciales; no emite token, a propósito
       presentation/
+        controllers/session_controller.dart # el token vigente; main.dart lo inyecta en core/
     clarification/             # Pantalla 5 — preguntas dirigidas con chips; su primera
                                # respuesta resuelve el `vertical` y recién ahí se crea la decisión
       domain/                    # ClarificationQuestion (las 3 preguntas), raw_input_composer.dart
@@ -89,7 +92,10 @@ test/
 
 - **Tipografía "Fragment" sustituida por Space Grotesk.** "Fragment" (docs/UX_DESIGN.md §1.2, display/headlines) no es una familia de fuente libremente redistribuible; Space Grotesk es la alternativa geométrica de licencia abierta más cercana disponible en Google Fonts. Ver `pubspec.yaml`.
 - **Riverpod sin `riverpod_generator` todavía.** docs/ARCHITECTURE.md §3 especifica "proveedores generados con `riverpod_generator`". Este primer incremento usa la API clásica (`Notifier`/`NotifierProvider`) para no añadir un paso de `build_runner` a un grafo de providers que todavía es pequeño (2 controllers). Es una desviación documentada, no silenciosa — se adopta codegen cuando el número de features lo justifique.
-- **`auth` no habla con un backend real todavía.** `LocalStubAuthRepository` (ver su docstring) es un adaptador interino: acepta cualquier email válido y no hace red. Un `SupabaseAuthRepository` real es el siguiente incremento de integración, no una pieza olvidada.
+- **`auth` es real: `SupabaseAuthRepository` (magic link + sesión anónima).** La sesión la persiste el SDK, así que un usuario que vuelve no parpadea por un estado deslogueado, y el token llega al interceptor de Dio a través de `SessionController` — que `main.dart` inyecta sobre el `accessTokenProvider` de `core/`. Esa inversión ocurre en el composition root justamente para que `core/` siga sin importar nada de `features/`.
+- **No hay reintento-con-refresh en el interceptor, y no debe haberlo.** El SDK de Supabase refresca la sesión en segundo plano y publica el token nuevo por `accessTokenChanges`, así que cada request ya lee el vigente. Reimplementar el refresh en la capa HTTP competiría con el del SDK, y dos componentes refrescando el mismo token es exactamente cómo se dispara la detección de reutilización de refresh tokens.
+- **Sin credenciales configuradas, el binding cae al stub — y el stub no emite token.** `--dart-define=SUPABASE_URL/SUPABASE_PUBLISHABLE_KEY` (se acepta también el viejo `SUPABASE_ANON_KEY`) decide cuál adaptador se usa. Sin ellos las llamadas al Core API salen sin `Authorization` y vuelven 401, y cada pantalla muestra su estado de error real: un build sin credenciales debe verse roto de la forma en que *está* roto, no simular una sesión cuyas peticiones fallan por razones que la UI no puede explicar.
+- **Los botones de OAuth de la Pantalla 3 siguen sin implementarse.** Necesitan redirect URLs por plataforma (deep link, URL scheme de iOS, intent filter de Android) y este proyecto todavía no tiene identificadores de bundle; un método en el puerto que ninguna pantalla puede alcanzar sería peor que su ausencia.
 - **Los objetivos capturados en Onboarding no se envían todavía.** `OnboardingRepository` (puerto) sigue sin implementación concreta: capturar objetivos ocurre *antes* de autenticarse (Pantalla 3 permite "probar antes de registrarse"), y `POST /v1/goals` exige un JWT. El adaptador ya existe (`ApiGoalsRepository`, que Perfil de Objetivos usa de verdad); lo que falta es el momento correcto para llamarlo — justo después de la primera petición autenticada, en paralelo al JIT provisioning que hace `GetOrCreateUserUseCase` en el backend. Depende de tener auth real, no de código de este feature.
 - **Sin refresh de token automático en `core/network/api_client.dart`.** Depende de la misma sesión de Supabase real que `auth` todavía no tiene. Documentado en el archivo, mismo patrón que el resto del repo (p. ej. `simulations/infrastructure/reality_engine_client.py`'s "no queue yet").
 - **El `vertical` se resuelve preguntando, no adivinando.** `POST /v1/decisions` exige un `vertical` (career/relationships/finance/business/relocation/conflict) que el campo de texto libre de Home no puede aportar. En vez de inventar un default silencioso que mal-clasificaría datos reales, el input de Home entrega el texto a Pantalla 5 (Clarificación), cuya primera pregunta con chips lo resuelve explícitamente; recién ahí se crea la decisión. Es el mecanismo que el propio spec define para esa pantalla ("opciones de respuesta rápida (chips) siempre que sea posible"), no un rodeo inventado.
@@ -115,6 +121,12 @@ test/
 flutter pub get
 flutter run                      # requiere un emulador/dispositivo o Chrome (-d chrome)
 flutter run --dart-define=API_BASE_URL=http://localhost:8000
+
+# Con auth real (sin esto, el binding cae al stub y todo responde 401):
+flutter run \
+  --dart-define=API_BASE_URL=http://localhost:8000 \
+  --dart-define=SUPABASE_URL=https://xxxx.supabase.co \
+  --dart-define=SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 ```
 
 ## Calidad — correr antes de cada commit

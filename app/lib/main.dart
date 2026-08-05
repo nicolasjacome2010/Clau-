@@ -1,11 +1,39 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'core/network/api_client.dart';
 import 'core/routing/app_router.dart';
 import 'design_system/var_theme.dart';
+import 'features/auth/data/supabase_config.dart';
+import 'features/auth/presentation/controllers/session_controller.dart';
 
-void main() {
-  runApp(const ProviderScope(child: VarOsApp()));
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  if (isSupabaseConfigured) {
+    // Restores a persisted session before the first frame, so a returning
+    // user never sees a signed-out flash. Skipped entirely when the build
+    // has no project — see `supabase_config.dart`.
+    await Supabase.initialize(
+      url: supabaseUrl,
+      publishableKey: supabasePublishableKey,
+    );
+  }
+
+  runApp(
+    ProviderScope(
+      overrides: [
+        // The composition root is the one place allowed to know about both
+        // sides: `core/` never imports a `features/` type, so the token
+        // reaches the Dio interceptor by an override here rather than by an
+        // upward import.
+        accessTokenProvider.overrideWith(
+          (ref) => ref.watch(sessionControllerProvider),
+        ),
+      ],
+      child: const VarOsApp(),
+    ),
+  );
 }
 
 class VarOsApp extends ConsumerWidget {

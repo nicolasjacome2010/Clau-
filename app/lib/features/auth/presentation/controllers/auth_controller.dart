@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../data/local_stub_auth_repository.dart';
-import '../../domain/auth_repository.dart';
+import 'session_controller.dart';
 
 enum AuthStatus { idle, submitting, success, error }
 
@@ -15,11 +14,6 @@ class AuthState {
     return AuthState(status: status ?? this.status, errorMessage: errorMessage);
   }
 }
-
-/// See `auth_repository.dart` for why this resolves to a stub today.
-final authRepositoryProvider = Provider<AuthRepository>(
-  (ref) => LocalStubAuthRepository(),
-);
 
 class AuthController extends Notifier<AuthState> {
   @override

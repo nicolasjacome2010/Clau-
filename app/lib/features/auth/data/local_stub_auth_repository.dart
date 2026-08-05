@@ -1,10 +1,12 @@
 import '../domain/auth_repository.dart';
 
-/// Interim stand-in for a real Supabase Auth adapter (see the port's
-/// docstring for why). Accepts any non-empty email and never actually
-/// talks to a network — this must be swapped for `SupabaseAuthRepository`
-/// before any real user data flows through this app; the loud class name
-/// is deliberate so it can't be mistaken for a production implementation.
+/// The binding used when a build carries no Supabase credentials (see
+/// `supabase_config.dart`). It accepts any well-formed email, talks to no
+/// network, and — deliberately — issues **no access token**: it lets the
+/// screens run in a credential-less dev build without ever pretending the
+/// resulting requests are authenticated. The loud class name stays so this
+/// can't be mistaken for the production adapter, which is
+/// `SupabaseAuthRepository`.
 class LocalStubAuthRepository implements AuthRepository {
   @override
   Future<void> signInWithEmail(String email) async {
@@ -18,4 +20,12 @@ class LocalStubAuthRepository implements AuthRepository {
   Future<void> continueAnonymously() async {
     await Future<void>.delayed(const Duration(milliseconds: 150));
   }
+
+  /// Never a fabricated token: an unauthenticated request that gets a
+  /// truthful 401 is better than one carrying a token no server accepts.
+  @override
+  String? get currentAccessToken => null;
+
+  @override
+  Stream<String?> get accessTokenChanges => const Stream<String?>.empty();
 }
