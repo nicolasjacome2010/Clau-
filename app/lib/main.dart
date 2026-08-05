@@ -7,6 +7,7 @@ import 'core/routing/app_router.dart';
 import 'design_system/var_theme.dart';
 import 'features/auth/data/supabase_config.dart';
 import 'features/auth/presentation/controllers/session_controller.dart';
+import 'features/settings/presentation/controllers/settings_controller.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -42,11 +43,14 @@ class VarOsApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(appRouterProvider);
+    // Until the stored preference is read, dark: it is the designed-first
+    // theme (docs/UX_DESIGN.md §4), so a returning user who chose dark never
+    // sees a light flash on launch.
+    final themeMode = ref.watch(themeModeControllerProvider).valueOrNull;
     return MaterialApp.router(
       title: 'VAR OS',
       debugShowCheckedModeBanner: false,
-      // Dark is the default, designed-first theme (docs/UX_DESIGN.md §4).
-      themeMode: ThemeMode.dark,
+      themeMode: themeMode ?? ThemeMode.dark,
       theme: VarTheme.light,
       darkTheme: VarTheme.dark,
       routerConfig: router,

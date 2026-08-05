@@ -15,4 +15,7 @@ abstract final class AppRoutes {
   /// Pantalla 14 — pushed from Home's account icon (docs/PRD.md §9
   /// hangs Suscripción off Home, not off the nav shell's 4 destinations).
   static const subscription = '/subscription';
+
+  /// Pantalla 15 — pushed from Home's settings icon.
+  static const settings = '/settings';
 }

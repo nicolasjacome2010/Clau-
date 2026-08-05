@@ -35,13 +35,7 @@ class HomeTabContent extends StatelessWidget {
                       color: context.varColors.textSecondary,
                     ),
                     tooltip: 'Ajustes',
-                    // Pantalla 15 isn't built. Saying so beats an icon that
-                    // silently does nothing — same treatment as the mic.
-                    onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Ajustes llega en un próximo módulo.'),
-                      ),
-                    ),
+                    onPressed: () => context.push(AppRoutes.settings),
                   ),
                   IconButton(
                     icon: Icon(

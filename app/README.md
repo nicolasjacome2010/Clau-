@@ -1,6 +1,6 @@
 # VAR OS — App (Flutter)
 
-Cliente Flutter (docs/ARCHITECTURE.md §3, docs/UX_DESIGN.md). **Estado actual: fundación + Pantallas 1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13 y 14 implementadas end to end (Splash → Onboarding → Auth → Home → Clarificación → Resultados/Comparación/Síntesis → Cierre de ciclo, + Mis Decisiones, Memoria, Perfil de Objetivos y Suscripción), con auth real de Supabase y todo lo demás contra el backend real.** Los 4 destinos del nav shell son reales: ya no queda ningún placeholder. Solo quedan de `docs/UX_DESIGN.md` §2 la Pantalla 6 (Simulación en vivo) y la 15 (Ajustes) — diseño, no código todavía; no asumas que existen solo porque están documentadas (misma regla que `CLAUDE.md` aplica al resto del repo).
+Cliente Flutter (docs/ARCHITECTURE.md §3, docs/UX_DESIGN.md). **Estado actual: todas las pantallas de `docs/UX_DESIGN.md` §2 están implementadas menos la 6 (Simulación en vivo), que espera un WebSocket de progreso que el backend no expone.** Splash → Onboarding → Auth → Home → Clarificación → Resultados/Comparación/Síntesis → Cierre de ciclo, más Mis Decisiones, Memoria, Perfil de Objetivos, Suscripción y Ajustes; con auth real de Supabase y todo lo demás contra el backend real. Los 4 destinos del nav shell son reales: no queda ningún placeholder. La Pantalla 6 es diseño, no código todavía; no asumas que existen solo porque están documentadas (misma regla que `CLAUDE.md` aplica al resto del repo).
 
 ## Estructura
 
@@ -15,6 +15,8 @@ lib/
     var_spacing.dart          # ritmo de espaciado + touch target mínimo (44pt, §1.5)
     var_motion.dart           # curvas ease-out/ease-in + duraciones (§1.4)
     var_breakpoints.dart      # mobile <600 / tablet 600-1024 / desktop >1024 (§1.6)
+    var_palette.dart          # ThemeExtension con la mitad semántica del color; las pantallas
+                               # leen `context.varColors.x`, nunca la constante *Dark*
     var_theme.dart            # ensambla los tokens en ThemeData — único lugar que lo hace
   core/
     network/api_client.dart   # Dio + interceptor de auth (token del feature `auth`) +
@@ -89,6 +91,11 @@ lib/
                                    # running_indicator.dart, outcome_section.dart,
                                    # calibration_needle.dart, comparison_view.dart
                                    # (tabla real en desktop / swipe por criterio en mobile)
+    settings/                  # Pantalla 15 — Ajustes. La apariencia es REAL (persistida);
+                               # privacidad, notificaciones e idioma dicen por qué no lo son
+      domain/settings_repository.dart  # puerto — preferencias del dispositivo, no del perfil
+      data/preferences_settings_repository.dart # shared_preferences; guarda el NOMBRE del enum
+      presentation/               # ThemeModeController + settings_screen.dart
     shared/presentation/       # widgets que ninguna feature es dueña: step_indicator.dart
                                # (Onboarding y Clarificación)
 test/
@@ -129,6 +136,9 @@ test/
 - **El plan cambia cuando Stripe lo confirma, no cuando el usuario abre el checkout.** `Subscription` es una réplica del estado de Stripe que solo escribe el manejador de webhooks, así que tras abrir la URL el cliente **re-lee** `GET /v1/billing/subscription` en vez de asumir la compra — quien cerró la pestaña sigue en Free, que es la verdad. Hay un test que fija exactamente eso.
 - **El precio mostrado se configura junto al precio que se cobra.** Un número hardcodeado en un binario publicado puede quedar desincronizado del precio que Stripe factura, y eso es un problema de defensa del consumidor, no un detalle de estilo. Por eso `STRIPE_PRICE_PRO_LABEL` vive al lado de `STRIPE_PRICE_PRO`, y un plan sin precio configurado muestra qué incluye sin afirmar cuánto cuesta ni ofrecer un botón muerto. La solución correcta a largo plazo es un `GET /v1/billing/plans` que lea Stripe.
 - **Sin dark patterns, y con un test que lo fija.** El spec los prohíbe por nombre ("sin 'más popular' artificial, sin temporizadores de urgencia falsos"), así que hay un test que verifica su *ausencia* — es la única forma de que siga siendo cierto cuando la copy evolucione. La única card destacada es la del plan actual, que es información, no persuasión.
+- **Ajustes solo controla lo que de verdad puede controlar.** La apariencia (Dark/Claro/Como el sistema) es real: se persiste en el dispositivo y `MaterialApp` la sigue. Privacidad, notificaciones e idioma aparecen con el motivo por el que todavía no funcionan (faltan endpoints de exportación/borrado, no hay servicio de notificaciones, la app está solo en español). Un switch que no conmuta nada sería peor que su ausencia.
+- **La apariencia es una preferencia del dispositivo, no del perfil.** Un teléfono en oscuro de noche y un escritorio en claro de día son el mismo usuario, así que sincronizarla al servidor sería incorrecto, no solo trabajo extra. Se guarda el *nombre* del enum, no su índice: un índice repuntaría en silencio todas las preferencias guardadas el día que alguien reordene `ThemeMode`.
+- **El default es "como el sistema", y la recomendación de dark es copy, no una elección pre-hecha** por el usuario (el spec pide exactamente eso). Mientras la preferencia guardada se lee, se muestra dark: es el tema diseñado primero, así que quien eligió dark no ve un flash claro al arrancar.
 - **Memoria (Pantalla 12) tiene los botones "Exportar mis datos"/"Borrar todo mi historial" visibles pero sin backend detrás.** El spec es explícito en que deben ser visibles (no escondidos en Ajustes), pero el backend no tiene ningún endpoint de exportación/borrado de datos todavía — tocarlos muestra un aviso "llega en un próximo módulo" en vez de fingir la acción. `bias.bias` se renderiza tal cual lo escribió el LLM (docs/REALITY_ENGINE.md Agente 5/12: es texto libre en español, no un código), así que no hay tabla de traducción cliente-side que mantener sincronizada.
 
 ## Desarrollo local

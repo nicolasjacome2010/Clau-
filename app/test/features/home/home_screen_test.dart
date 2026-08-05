@@ -12,6 +12,9 @@ import 'package:var_os_app/features/decisions/presentation/controllers/decisions
 import 'package:var_os_app/features/goals/presentation/controllers/goals_controller.dart';
 import 'package:var_os_app/features/home/presentation/screens/home_screen.dart';
 import 'package:var_os_app/features/memory/presentation/controllers/bias_profile_controller.dart';
+import 'package:var_os_app/features/settings/domain/settings_repository.dart';
+import 'package:var_os_app/features/settings/presentation/controllers/settings_controller.dart';
+import 'package:var_os_app/features/settings/presentation/screens/settings_screen.dart';
 import 'package:var_os_app/features/simulations/presentation/controllers/decision_simulation_controller.dart';
 import 'package:var_os_app/features/simulations/presentation/screens/decision_result_screen.dart';
 
@@ -20,6 +23,14 @@ import '../decisions/fakes.dart';
 import '../goals/fakes.dart';
 import '../memory/fakes.dart';
 import '../simulations/fakes.dart';
+
+class _StubSettingsRepository implements SettingsRepository {
+  @override
+  Future<ThemeMode> readThemeMode() async => ThemeMode.dark;
+
+  @override
+  Future<void> writeThemeMode(ThemeMode mode) async {}
+}
 
 void main() {
   Future<void> pumpHome(
@@ -40,6 +51,10 @@ void main() {
           path: AppRoutes.clarification,
           builder: (context, state) =>
               ClarificationScreen(rawInput: state.extra! as String),
+        ),
+        GoRoute(
+          path: AppRoutes.settings,
+          builder: (context, state) => const SettingsScreen(),
         ),
         GoRoute(
           path: AppRoutes.subscription,
@@ -68,6 +83,11 @@ void main() {
             FakeSimulationsRepository(),
           ),
           billingRepositoryProvider.overrideWithValue(FakeBillingRepository()),
+          // Ajustes would otherwise reach for the platform's real
+          // preference store, which a widget test has no plugin for.
+          settingsRepositoryProvider.overrideWithValue(
+            _StubSettingsRepository(),
+          ),
         ],
         child: MaterialApp.router(routerConfig: router),
       ),
@@ -285,15 +305,12 @@ void main() {
     expect(find.byType(SubscriptionScreen), findsOneWidget);
   });
 
-  testWidgets('the settings icon says Ajustes is not built yet', (
-    tester,
-  ) async {
-    // A dead icon is worse than an honest one — same treatment as the mic.
+  testWidgets('the settings icon opens Ajustes', (tester) async {
     await pumpHome(tester, repository: FakeDecisionsRepository());
 
     await tester.tap(find.byTooltip('Ajustes'));
-    await tester.pump();
+    await tester.pumpAndSettle();
 
-    expect(find.text('Ajustes llega en un próximo módulo.'), findsOneWidget);
+    expect(find.byType(SettingsScreen), findsOneWidget);
   });
 }

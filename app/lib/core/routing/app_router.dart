@@ -7,6 +7,7 @@ import '../../features/clarification/presentation/screens/clarification_screen.d
 import '../../features/decisions/domain/decision_ref.dart';
 import '../../features/home/presentation/screens/home_screen.dart';
 import '../../features/onboarding/presentation/screens/onboarding_screen.dart';
+import '../../features/settings/presentation/screens/settings_screen.dart';
 import '../../features/simulations/presentation/screens/decision_result_screen.dart';
 import '../../features/splash/presentation/splash_screen.dart';
 import 'app_routes.dart';
@@ -40,6 +41,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             title: decision.title,
           );
         },
+      ),
+      GoRoute(
+        path: AppRoutes.settings,
+        builder: (context, state) => const SettingsScreen(),
       ),
       GoRoute(
         path: AppRoutes.subscription,
