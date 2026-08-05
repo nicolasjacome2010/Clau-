@@ -264,7 +264,7 @@ void main() {
     expect(outcome.matchedNoScenario, isTrue);
   });
 
-  test('maps 409 to NoCompletedSimulationError', () async {
+  test('maps 409 to the ambiguous-conflict type', () async {
     final dio = _dioWith(
       _FakeHttpClientAdapter.json(jsonEncode({'detail': 'nope'}), status: 409),
     );
@@ -273,7 +273,7 @@ void main() {
       ApiSimulationsRepository(
         dio,
       ).reportOutcome(decisionId: 'd1', reportedOutcome: 'algo'),
-      throwsA(isA<NoCompletedSimulationError>()),
+      throwsA(isA<OutcomeConflictError>()),
     );
   });
 
@@ -302,7 +302,7 @@ void main() {
       throwsA(
         allOf(
           isA<SimulationsRepositoryError>(),
-          isNot(isA<NoCompletedSimulationError>()),
+          isNot(isA<OutcomeConflictError>()),
           isNot(isA<CalibrationUnavailableError>()),
         ),
       ),
@@ -316,6 +316,48 @@ void main() {
 
     expect(
       ApiSimulationsRepository(dio).listForDecision('d1'),
+      throwsA(isA<SimulationsRepositoryError>()),
+    );
+  });
+
+  test('listOutcomes parses the collection', () async {
+    final adapter = _FakeHttpClientAdapter.json(
+      jsonEncode([
+        {
+          'id': 'o1',
+          'decision_id': 'd1',
+          'reported_outcome': 'Acepté la oferta.',
+          'closest_scenario_id': null,
+          'calibration_delta': -8,
+          'system_errors_identified': <String>[],
+          'reported_at': '2026-07-01T00:00:00Z',
+        },
+      ]),
+    );
+    final dio = _dioWith(adapter);
+
+    final outcomes = await ApiSimulationsRepository(dio).listOutcomes();
+
+    expect(outcomes, hasLength(1));
+    expect(outcomes.single.decisionId, 'd1');
+    expect(outcomes.single.matchedNoScenario, isTrue);
+    expect(adapter.requests.single.method, 'GET');
+    expect(adapter.requests.single.path, '/v1/outcomes');
+  });
+
+  test('listOutcomes returns an empty list for an empty response', () async {
+    final dio = _dioWith(_FakeHttpClientAdapter.json(jsonEncode(<Object?>[])));
+
+    expect(await ApiSimulationsRepository(dio).listOutcomes(), isEmpty);
+  });
+
+  test('listOutcomes rejects a non-list response shape', () async {
+    final dio = _dioWith(
+      _FakeHttpClientAdapter.json(jsonEncode({'not': 'a list'})),
+    );
+
+    expect(
+      ApiSimulationsRepository(dio).listOutcomes(),
       throwsA(isA<SimulationsRepositoryError>()),
     );
   });

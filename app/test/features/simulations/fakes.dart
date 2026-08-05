@@ -14,7 +14,10 @@ class FakeSimulationsRepository implements SimulationsRepository {
     this.outcomeError,
     this.reportedOutcome,
     this.outcomeGate,
-  }) : simulations = simulations ?? const [];
+    this.outcomesError,
+    List<DecisionOutcome>? closedLoops,
+  }) : simulations = simulations ?? const [],
+       _closedLoops = closedLoops ?? const [];
 
   final List<Simulation> simulations;
   final SimulationsRepositoryError? listError;
@@ -26,6 +29,12 @@ class FakeSimulationsRepository implements SimulationsRepository {
 
   /// Same purpose as `runGate`, for the calibration round trip.
   final Completer<void>? outcomeGate;
+
+  final SimulationsRepositoryError? outcomesError;
+
+  /// What `GET /v1/outcomes` would answer — loops closed before this
+  /// session, plus anything reported during it.
+  List<DecisionOutcome> _closedLoops;
 
   /// What `runSimulation` returns on success. Left `null` when a test only
   /// cares about the failure path.
@@ -39,6 +48,10 @@ class FakeSimulationsRepository implements SimulationsRepository {
 
   /// Every decision id `runSimulation` was called with, in order.
   final List<String> runCalls = [];
+
+  /// How many times `listOutcomes` was called — lets a test assert that a
+  /// list screen costs one read, not one per row.
+  int outcomesReads = 0;
 
   /// Every `reportOutcome` call, in order — lets a test assert on exactly
   /// what would reach `POST /v1/decisions/{id}/outcome`.
@@ -65,6 +78,19 @@ class FakeSimulationsRepository implements SimulationsRepository {
         );
   }
 
+  /// Simulates the loop being closed by someone else (another device, a
+  /// double tap that raced) between one read and the next.
+  void closeLoopBehindOurBack(DecisionOutcome outcome) {
+    _closedLoops = [..._closedLoops, outcome];
+  }
+
+  @override
+  Future<List<DecisionOutcome>> listOutcomes() async {
+    outcomesReads += 1;
+    if (outcomesError != null) throw outcomesError!;
+    return _closedLoops;
+  }
+
   @override
   Future<DecisionOutcome> reportOutcome({
     required String decisionId,
@@ -76,8 +102,12 @@ class FakeSimulationsRepository implements SimulationsRepository {
     ));
     if (outcomeGate != null) await outcomeGate!.future;
     if (outcomeError != null) throw outcomeError!;
-    return this.reportedOutcome ??
+    final outcome =
+        this.reportedOutcome ??
         testOutcome(decisionId: decisionId, reportedOutcome: reportedOutcome);
+    // The real backend would return it from `GET /v1/outcomes` afterwards.
+    _closedLoops = [..._closedLoops, outcome];
+    return outcome;
   }
 }
 

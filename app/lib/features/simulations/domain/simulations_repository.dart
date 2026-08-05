@@ -14,14 +14,16 @@ import 'simulation.dart';
 ///
 /// `reportOutcome` closes the loop (docs/PRD.md CU8): it hands the user's
 /// account of what really happened to Agente 12, which recalibrates the
-/// user's bias profile. There is deliberately **no** `getOutcome` here —
-/// the backend exposes no `GET .../outcome`, so this port doesn't pretend
-/// it can tell whether a decision's loop was already closed. See
-/// `DecisionOutcomeController` for what that costs and how it's handled.
+/// user's bias profile. `listOutcomes` is how the client knows which loops
+/// are already closed — a collection, mirroring `GET /v1/outcomes`, because
+/// the question ("which of my decisions are still open?") is asked by a
+/// list screen and a per-decision read would be an N+1 against it.
 abstract class SimulationsRepository {
   Future<List<Simulation>> listForDecision(String decisionId);
 
   Future<Simulation> runSimulation(String decisionId);
+
+  Future<List<DecisionOutcome>> listOutcomes();
 
   Future<DecisionOutcome> reportOutcome({
     required String decisionId,
@@ -39,12 +41,17 @@ class SimulationsRepositoryError implements Exception {
   String toString() => 'SimulationsRepositoryError: $message';
 }
 
-/// The backend's 409 on `POST /v1/decisions/{id}/outcome`: there is nothing
-/// to calibrate against because the decision was never simulated to
-/// completion. A distinct type because the user-facing answer is distinct —
-/// "simulá primero", not "algo salió mal".
-class NoCompletedSimulationError extends SimulationsRepositoryError {
-  NoCompletedSimulationError(super.message);
+/// A 409 from `POST /v1/decisions/{id}/outcome`.
+///
+/// The backend answers 409 for two different conflicts — the decision has
+/// no completed simulation to calibrate against, and the loop was already
+/// closed — and both carry only a prose `detail`. This type deliberately
+/// does not try to tell them apart by matching that string across a service
+/// boundary: `DecisionOutcomeController` resolves the ambiguity by asking
+/// the source of truth instead (re-reading `GET /v1/outcomes` and looking
+/// for this decision), which is correct whatever the wording ever becomes.
+class OutcomeConflictError extends SimulationsRepositoryError {
+  OutcomeConflictError(super.message);
 }
 
 /// The backend's 503: Reality Engine's `/v1/calibrate` is unreachable or

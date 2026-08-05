@@ -49,8 +49,7 @@ class _OutcomeSectionState extends ConsumerState<OutcomeSection> {
   @override
   Widget build(BuildContext context) {
     final provider = decisionOutcomeControllerProvider(widget.decisionId);
-    final state = ref.watch(provider);
-    final outcome = state.outcome;
+    final asyncState = ref.watch(provider);
 
     return Container(
       width: double.infinity,
@@ -60,15 +59,37 @@ class _OutcomeSectionState extends ConsumerState<OutcomeSection> {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: VarColors.dividerDark),
       ),
-      child: outcome != null
-          ? _Confirmation(outcome: outcome, scenarios: widget.scenarios)
-          : _Prompt(
-              controller: _controller,
-              isSubmitting: state.isSubmitting,
-              errorMessage: state.errorMessage,
-              onSubmit: () =>
-                  ref.read(provider.notifier).report(_controller.text),
-            ),
+      child: asyncState.when(
+        data: (state) {
+          final outcome = state.outcome;
+          return outcome != null
+              ? _Confirmation(outcome: outcome, scenarios: widget.scenarios)
+              : _Prompt(
+                  controller: _controller,
+                  isSubmitting: state.isSubmitting,
+                  errorMessage: state.errorMessage,
+                  onSubmit: () =>
+                      ref.read(provider.notifier).report(_controller.text),
+                );
+        },
+        // Until `GET /v1/outcomes` answers, whether this loop is already
+        // closed is unknown — and offering the prompt would be a guess that
+        // could turn into a rejected request a second later.
+        loading: () => const Center(
+          child: Padding(
+            padding: EdgeInsets.all(VarSpacing.md),
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+        // A failed outcomes read must not hide the prompt: the loop is far
+        // more likely open than closed, and `POST` answers 409 if it isn't.
+        error: (error, _) => _Prompt(
+          controller: _controller,
+          isSubmitting: false,
+          errorMessage: null,
+          onSubmit: () => ref.read(provider.notifier).report(_controller.text),
+        ),
+      ),
     );
   }
 }

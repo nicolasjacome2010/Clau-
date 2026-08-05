@@ -4,8 +4,8 @@ import '../domain/decision_outcome.dart';
 import '../domain/simulation.dart';
 import '../domain/simulations_repository.dart';
 
-/// Real adapter over `GET`/`POST /v1/decisions/{id}/simulations` and
-/// `POST /v1/decisions/{id}/outcome`.
+/// Real adapter over `GET`/`POST /v1/decisions/{id}/simulations`,
+/// `POST /v1/decisions/{id}/outcome` and `GET /v1/outcomes`.
 class ApiSimulationsRepository implements SimulationsRepository {
   ApiSimulationsRepository(this._dio);
 
@@ -116,6 +116,24 @@ class ApiSimulationsRepository implements SimulationsRepository {
   }
 
   @override
+  Future<List<DecisionOutcome>> listOutcomes() async {
+    final Response<dynamic> response;
+    try {
+      response = await _dio.get<dynamic>('/v1/outcomes');
+    } on DioException catch (exc) {
+      throw SimulationsRepositoryError(
+        'Failed to load outcomes: ${exc.message}',
+      );
+    }
+
+    final data = response.data;
+    if (data is! List) {
+      throw SimulationsRepositoryError('Unexpected outcomes response shape');
+    }
+    return data.map(_toOutcome).toList();
+  }
+
+  @override
   Future<DecisionOutcome> reportOutcome({
     required String decisionId,
     required String reportedOutcome,
@@ -131,14 +149,14 @@ class ApiSimulationsRepository implements SimulationsRepository {
         options: Options(receiveTimeout: _runTimeout, sendTimeout: _runTimeout),
       );
     } on DioException catch (exc) {
-      // The two statuses the backend gives distinct meaning to get distinct
-      // types, so the screen can say something true instead of a generic
-      // "algo salió mal" (see this router's own `HTTPException`s).
+      // Typed per status, so the screen can say something true instead of a
+      // generic "algo salió mal". 409 covers two different conflicts and
+      // only prose separates them, so it stays deliberately ambiguous here
+      // — `DecisionOutcomeController` resolves it against `GET /v1/outcomes`
+      // rather than by parsing a message across a service boundary.
       final status = exc.response?.statusCode;
       if (status == 409) {
-        throw NoCompletedSimulationError(
-          'Decision has no completed simulation to report against',
-        );
+        throw OutcomeConflictError('Outcome conflict: ${exc.response?.data}');
       }
       if (status == 503) {
         throw CalibrationUnavailableError(

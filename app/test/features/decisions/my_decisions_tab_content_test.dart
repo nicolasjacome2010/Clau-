@@ -17,6 +17,7 @@ void main() {
   Future<void> pumpTab(
     WidgetTester tester, {
     required DecisionsRepository repository,
+    FakeSimulationsRepository? simulations,
   }) async {
     // A real router rather than a bare `MaterialApp`: each tile pushes the
     // decision's result screen, so navigation is part of what's under test.
@@ -46,7 +47,7 @@ void main() {
         overrides: [
           decisionsRepositoryProvider.overrideWithValue(repository),
           simulationsRepositoryProvider.overrideWithValue(
-            FakeSimulationsRepository(),
+            simulations ?? FakeSimulationsRepository(),
           ),
         ],
         child: MaterialApp.router(routerConfig: router),
@@ -161,5 +162,109 @@ void main() {
     await tester.tap(find.text('Reintentar'));
     await tester.pumpAndSettle();
     expect(find.text('No pudimos cargar tus decisiones.'), findsOneWidget);
+  });
+
+  testWidgets('marks a completed decision left open for more than 60 days', (
+    tester,
+  ) async {
+    // docs/UX_DESIGN.md Pantalla 10 — and the marker carries words, not just
+    // the amber dot (§1.5: color is never the only differentiator).
+    await pumpTab(
+      tester,
+      repository: FakeDecisionsRepository(
+        decisions: [
+          testDecision(
+            id: 'd1',
+            title: 'Vieja sin cerrar',
+            status: 'completed',
+            updatedAt: DateTime.now().subtract(const Duration(days: 90)),
+          ),
+        ],
+      ),
+    );
+
+    expect(find.text('Sin cerrar'), findsOneWidget);
+  });
+
+  testWidgets('does not mark one whose loop is already closed', (tester) async {
+    await pumpTab(
+      tester,
+      repository: FakeDecisionsRepository(
+        decisions: [
+          testDecision(
+            id: 'd1',
+            title: 'Vieja pero cerrada',
+            status: 'completed',
+            updatedAt: DateTime.now().subtract(const Duration(days: 90)),
+          ),
+        ],
+      ),
+      simulations: FakeSimulationsRepository(
+        closedLoops: [testOutcome(decisionId: 'd1')],
+      ),
+    );
+
+    expect(find.text('Sin cerrar'), findsNothing);
+  });
+
+  testWidgets('does not nag before the 60 days are up', (tester) async {
+    // "invita, no presiona": a decision completed last week is not overdue.
+    await pumpTab(
+      tester,
+      repository: FakeDecisionsRepository(
+        decisions: [
+          testDecision(
+            id: 'd1',
+            title: 'Recién completada',
+            status: 'completed',
+            updatedAt: DateTime.now().subtract(const Duration(days: 7)),
+          ),
+        ],
+      ),
+    );
+
+    expect(find.text('Sin cerrar'), findsNothing);
+  });
+
+  testWidgets('never marks a decision that was never completed', (
+    tester,
+  ) async {
+    await pumpTab(
+      tester,
+      repository: FakeDecisionsRepository(
+        decisions: [
+          testDecision(
+            id: 'd1',
+            title: 'Vieja pero activa',
+            status: 'clarifying',
+            updatedAt: DateTime.now().subtract(const Duration(days: 400)),
+          ),
+        ],
+      ),
+    );
+
+    expect(find.text('Sin cerrar'), findsNothing);
+  });
+
+  testWidgets('reads the outcomes list once, not once per row', (tester) async {
+    final simulations = FakeSimulationsRepository();
+    await pumpTab(
+      tester,
+      repository: FakeDecisionsRepository(
+        decisions: [
+          for (var i = 0; i < 5; i++)
+            testDecision(
+              id: 'd$i',
+              title: 'Decisión $i',
+              status: 'completed',
+              updatedAt: DateTime.now().subtract(const Duration(days: 90)),
+            ),
+        ],
+      ),
+      simulations: simulations,
+    );
+
+    expect(find.text('Sin cerrar'), findsNWidgets(5));
+    expect(simulations.outcomesReads, 1);
   });
 }

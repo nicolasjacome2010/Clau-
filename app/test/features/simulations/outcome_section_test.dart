@@ -8,6 +8,7 @@ import 'package:var_os_app/core/routing/app_routes.dart';
 import 'package:var_os_app/features/decisions/domain/decision_ref.dart';
 import 'package:var_os_app/features/decisions/presentation/controllers/decisions_controller.dart';
 import 'package:var_os_app/features/memory/presentation/controllers/bias_profile_controller.dart';
+import 'package:var_os_app/features/simulations/domain/decision_outcome.dart';
 import 'package:var_os_app/features/simulations/domain/simulations_repository.dart';
 import 'package:var_os_app/features/simulations/presentation/controllers/decision_simulation_controller.dart';
 import 'package:var_os_app/features/simulations/presentation/screens/decision_result_screen.dart';
@@ -65,6 +66,7 @@ void main() {
     double calibrationDelta = 0,
     List<String> systemErrors = const [],
     bool reported = true,
+    List<DecisionOutcome>? closedLoops,
   }) {
     return FakeSimulationsRepository(
       simulations: [
@@ -77,6 +79,7 @@ void main() {
       ],
       outcomeError: outcomeError,
       outcomeGate: outcomeGate,
+      closedLoops: closedLoops,
       reportedOutcome: reported
           ? testOutcome(
               closestScenarioId: closestScenarioId,
@@ -245,21 +248,24 @@ void main() {
     expect(find.text('Registrar lo que pasó'), findsOneWidget);
   });
 
-  testWidgets('a 409 tells the user to simulate first, not "algo salió mal"', (
-    tester,
-  ) async {
-    await pumpResult(
-      tester,
-      repository: repositoryWithCompletedSimulation(
-        outcomeError: NoCompletedSimulationError('no completed simulation'),
-      ),
-    );
+  testWidgets(
+    'a 409 with no outcome on record tells the user to simulate first',
+    (tester) async {
+      // The backend answers 409 for two different conflicts; with no outcome
+      // in `GET /v1/outcomes` for this decision, it can only be the other one.
+      await pumpResult(
+        tester,
+        repository: repositoryWithCompletedSimulation(
+          outcomeError: OutcomeConflictError('conflict'),
+        ),
+      );
 
-    await submit(tester, 'Acepté la oferta.');
-    await tester.pumpAndSettle();
+      await submit(tester, 'Acepté la oferta.');
+      await tester.pumpAndSettle();
 
-    expect(find.textContaining('Primero necesitás simular'), findsOneWidget);
-  });
+      expect(find.textContaining('Primero necesitás simular'), findsOneWidget);
+    },
+  );
 
   testWidgets('any other failure is reported without losing the prompt', (
     tester,
@@ -275,6 +281,91 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('No pudimos registrar lo que pasó.'), findsOneWidget);
+    expect(find.text('Registrar lo que pasó'), findsOneWidget);
+  });
+
+  testWidgets('a loop closed in an earlier session opens already closed', (
+    tester,
+  ) async {
+    // The whole point of reading `GET /v1/outcomes`: without it the screen
+    // would re-offer the prompt and the user would earn a 409.
+    await pumpResult(
+      tester,
+      repository: repositoryWithCompletedSimulation(
+        closedLoops: [
+          testOutcome(
+            closestScenarioId: 's2',
+            systemErrorsIdentified: const ['Sobrestimamos el riesgo'],
+          ),
+        ],
+      ),
+    );
+
+    expect(find.text('El sistema aprendió algo'), findsOneWidget);
+    expect(find.text('Lo más parecido fue: Quedarme'), findsOneWidget);
+    expect(find.text('Registrar lo que pasó'), findsNothing);
+  });
+
+  testWidgets('another decision\'s closed loop does not close this one', (
+    tester,
+  ) async {
+    await pumpResult(
+      tester,
+      repository: repositoryWithCompletedSimulation(
+        closedLoops: [testOutcome(decisionId: 'otra-decision')],
+      ),
+    );
+
+    expect(find.text('Registrar lo que pasó'), findsOneWidget);
+    expect(find.text('El sistema aprendió algo'), findsNothing);
+  });
+
+  testWidgets('a 409 on an already-closed loop shows the existing outcome', (
+    tester,
+  ) async {
+    // Both 409s carry only prose, so the client asks the source of truth
+    // rather than matching the message: an outcome exists, so the loop was
+    // already closed and showing it is the truthful answer.
+    final repository = FakeSimulationsRepository(
+      simulations: [
+        testSimulation(
+          scenarios: [
+            testScenario(id: 's1', title: 'Aceptar la oferta', rank: 1),
+          ],
+        ),
+      ],
+      outcomeError: OutcomeConflictError('conflict'),
+    );
+    await pumpResult(tester, repository: repository);
+
+    // The prompt is offered because the first read found nothing; the
+    // outcome appears between that read and the report.
+    repository.closeLoopBehindOurBack(testOutcome(closestScenarioId: 's1'));
+
+    await submit(tester, 'Acepté la oferta.');
+    await tester.pumpAndSettle();
+
+    expect(find.text('El sistema aprendió algo'), findsOneWidget);
+    expect(find.text('Registrar lo que pasó'), findsNothing);
+  });
+
+  testWidgets('a failed outcomes read still offers the prompt', (tester) async {
+    // The loop is far likelier open than closed, and `POST` answers 409 if
+    // it isn't — hiding the prompt would cost more than an occasional 409.
+    await pumpResult(
+      tester,
+      repository: FakeSimulationsRepository(
+        simulations: [
+          testSimulation(
+            scenarios: [
+              testScenario(id: 's1', title: 'Aceptar la oferta', rank: 1),
+            ],
+          ),
+        ],
+        outcomesError: SimulationsRepositoryError('network down'),
+      ),
+    );
+
     expect(find.text('Registrar lo que pasó'), findsOneWidget);
   });
 }
