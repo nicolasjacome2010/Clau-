@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../../../core/routing/app_routes.dart';
 import '../../../../design_system/var_colors.dart';
 import '../../../../design_system/var_spacing.dart';
 import '../../../../design_system/var_typography.dart';
@@ -26,15 +28,28 @@ class HomeTabContent extends StatelessWidget {
                 style: VarTypography.display(20, VarColors.textPrimaryDark),
               ),
               Row(
-                children: const [
-                  Icon(
-                    Icons.settings_outlined,
-                    color: VarColors.textSecondaryDark,
+                children: [
+                  IconButton(
+                    icon: const Icon(
+                      Icons.settings_outlined,
+                      color: VarColors.textSecondaryDark,
+                    ),
+                    tooltip: 'Ajustes',
+                    // Pantalla 15 isn't built. Saying so beats an icon that
+                    // silently does nothing — same treatment as the mic.
+                    onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Ajustes llega en un próximo módulo.'),
+                      ),
+                    ),
                   ),
-                  SizedBox(width: VarSpacing.sm),
-                  Icon(
-                    Icons.person_outline,
-                    color: VarColors.textSecondaryDark,
+                  IconButton(
+                    icon: const Icon(
+                      Icons.person_outline,
+                      color: VarColors.textSecondaryDark,
+                    ),
+                    tooltip: 'Suscripción',
+                    onPressed: () => context.push(AppRoutes.subscription),
                   ),
                 ],
               ),

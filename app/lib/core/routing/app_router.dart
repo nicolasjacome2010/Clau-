@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/auth/presentation/screens/auth_screen.dart';
+import '../../features/billing/presentation/screens/subscription_screen.dart';
 import '../../features/clarification/presentation/screens/clarification_screen.dart';
 import '../../features/decisions/domain/decision_ref.dart';
 import '../../features/home/presentation/screens/home_screen.dart';
@@ -39,6 +40,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             title: decision.title,
           );
         },
+      ),
+      GoRoute(
+        path: AppRoutes.subscription,
+        builder: (context, state) => const SubscriptionScreen(),
       ),
       GoRoute(
         path: AppRoutes.clarification,

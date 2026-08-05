@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:var_os_app/core/routing/app_routes.dart';
+import 'package:var_os_app/features/billing/presentation/controllers/subscription_controller.dart';
+import 'package:var_os_app/features/billing/presentation/screens/subscription_screen.dart';
 import 'package:var_os_app/features/clarification/presentation/screens/clarification_screen.dart';
 import 'package:var_os_app/features/decisions/domain/decision_ref.dart';
 import 'package:var_os_app/features/decisions/domain/decisions_repository.dart';
@@ -13,6 +15,7 @@ import 'package:var_os_app/features/memory/presentation/controllers/bias_profile
 import 'package:var_os_app/features/simulations/presentation/controllers/decision_simulation_controller.dart';
 import 'package:var_os_app/features/simulations/presentation/screens/decision_result_screen.dart';
 
+import '../billing/fakes.dart';
 import '../decisions/fakes.dart';
 import '../goals/fakes.dart';
 import '../memory/fakes.dart';
@@ -39,6 +42,10 @@ void main() {
               ClarificationScreen(rawInput: state.extra! as String),
         ),
         GoRoute(
+          path: AppRoutes.subscription,
+          builder: (context, state) => const SubscriptionScreen(),
+        ),
+        GoRoute(
           path: AppRoutes.decisionResult,
           builder: (context, state) {
             final decision = state.extra! as DecisionRef;
@@ -60,6 +67,7 @@ void main() {
           simulationsRepositoryProvider.overrideWithValue(
             FakeSimulationsRepository(),
           ),
+          billingRepositoryProvider.overrideWithValue(FakeBillingRepository()),
         ],
         child: MaterialApp.router(routerConfig: router),
       ),
@@ -264,5 +272,28 @@ void main() {
 
     expect(find.byType(NavigationRail), findsOneWidget);
     expect(find.byType(NavigationBar), findsNothing);
+  });
+
+  testWidgets('the account icon opens Suscripción', (tester) async {
+    await pumpHome(tester, repository: FakeDecisionsRepository());
+
+    // By tooltip, not by icon: the Perfil nav destination uses the same
+    // glyph, and a finder that matches both would be ambiguous.
+    await tester.tap(find.byTooltip('Suscripción'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(SubscriptionScreen), findsOneWidget);
+  });
+
+  testWidgets('the settings icon says Ajustes is not built yet', (
+    tester,
+  ) async {
+    // A dead icon is worse than an honest one — same treatment as the mic.
+    await pumpHome(tester, repository: FakeDecisionsRepository());
+
+    await tester.tap(find.byTooltip('Ajustes'));
+    await tester.pump();
+
+    expect(find.text('Ajustes llega en un próximo módulo.'), findsOneWidget);
   });
 }

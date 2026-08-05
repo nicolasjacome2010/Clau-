@@ -1,6 +1,6 @@
 # VAR OS — App (Flutter)
 
-Cliente Flutter (docs/ARCHITECTURE.md §3, docs/UX_DESIGN.md). **Estado actual: fundación + Pantallas 1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12 y 13 implementadas end to end (Splash → Onboarding → Auth → Home → Clarificación → Resultados/Comparación/Síntesis → Cierre de ciclo, + Mis Decisiones, Memoria y Perfil de Objetivos en el nav shell), con auth real de Supabase y todo lo demás contra el backend real.** Los 4 destinos del nav shell son reales: ya no queda ningún placeholder. Solo quedan de `docs/UX_DESIGN.md` §2 la Pantalla 6 (Simulación en vivo), la 14 (Suscripción) y la 15 (Ajustes) — diseño, no código todavía; no asumas que existen solo porque están documentadas (misma regla que `CLAUDE.md` aplica al resto del repo).
+Cliente Flutter (docs/ARCHITECTURE.md §3, docs/UX_DESIGN.md). **Estado actual: fundación + Pantallas 1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13 y 14 implementadas end to end (Splash → Onboarding → Auth → Home → Clarificación → Resultados/Comparación/Síntesis → Cierre de ciclo, + Mis Decisiones, Memoria, Perfil de Objetivos y Suscripción), con auth real de Supabase y todo lo demás contra el backend real.** Los 4 destinos del nav shell son reales: ya no queda ningún placeholder. Solo quedan de `docs/UX_DESIGN.md` §2 la Pantalla 6 (Simulación en vivo) y la 15 (Ajustes) — diseño, no código todavía; no asumas que existen solo porque están documentadas (misma regla que `CLAUDE.md` aplica al resto del repo).
 
 ## Estructura
 
@@ -33,6 +33,13 @@ lib/
       data/local_stub_auth_repository.dart # binding sin credenciales; no emite token, a propósito
       presentation/
         controllers/session_controller.dart # el token vigente; main.dart lo inyecta en core/
+    billing/                   # Pantalla 14 — Suscripción/Facturación, REAL
+      domain/                    # Subscription, BillingPlan, BillingRepository, UrlOpener (puerto)
+      data/api_billing_repository.dart # GET /v1/billing/subscription + checkout/portal sessions
+      data/billing_config.dart         # price ids y BILLING_RETURN_URL por --dart-define
+      data/url_launcher_opener.dart    # abre Stripe en el navegador externo, nunca en un webview
+      presentation/               # SubscriptionController (plan real) + BillingActionController
+                                   # (checkout/portal) + plan_card.dart
     clarification/             # Pantalla 5 — preguntas dirigidas con chips; su primera
                                # respuesta resuelve el `vertical` y recién ahí se crea la decisión
       domain/                    # ClarificationQuestion (las 3 preguntas), raw_input_composer.dart
@@ -118,6 +125,10 @@ test/
 - **La alineación se muestra una fila por objetivo, nunca promediada.** El wireframe dibuja una sola fila "Alineación objetivo", pero cada escenario trae un score por objetivo y el cliente no recibe los pesos relativos del usuario; promediarlos inventaría una ponderación igualitaria y la presentaría como opinión del sistema. Cada objetivo tiene su fila y el usuario pondera — que es la postura del producto entero.
 - **Un objetivo contra el que un escenario nunca fue evaluado se muestra como "—", no como 0.** "Sin dato" y "sale pésimo" son afirmaciones distintas.
 - **La probabilidad relativa se dibuja en color neutro** (`ScorePolarity.neutral`): un 38% de probabilidad no es una buena ni una mala noticia, y pintarlo de verde o rojo afirmaría una opinión que el sistema no tiene.
+- **El pago nunca ocurre dentro de la app.** Ambos botones piden al backend una URL hospedada por Stripe y se la pasan al navegador *externo* (`LaunchMode.externalApplication`), no a un webview: renderizar el formulario de tarjeta de alguien dentro de la app esconde justamente las señales —barra de direcciones, candado— con las que distingue una página de pago de una de phishing. Ningún dato de tarjeta toca este proceso.
+- **El plan cambia cuando Stripe lo confirma, no cuando el usuario abre el checkout.** `Subscription` es una réplica del estado de Stripe que solo escribe el manejador de webhooks, así que tras abrir la URL el cliente **re-lee** `GET /v1/billing/subscription` en vez de asumir la compra — quien cerró la pestaña sigue en Free, que es la verdad. Hay un test que fija exactamente eso.
+- **El precio mostrado se configura junto al precio que se cobra.** Un número hardcodeado en un binario publicado puede quedar desincronizado del precio que Stripe factura, y eso es un problema de defensa del consumidor, no un detalle de estilo. Por eso `STRIPE_PRICE_PRO_LABEL` vive al lado de `STRIPE_PRICE_PRO`, y un plan sin precio configurado muestra qué incluye sin afirmar cuánto cuesta ni ofrecer un botón muerto. La solución correcta a largo plazo es un `GET /v1/billing/plans` que lea Stripe.
+- **Sin dark patterns, y con un test que lo fija.** El spec los prohíbe por nombre ("sin 'más popular' artificial, sin temporizadores de urgencia falsos"), así que hay un test que verifica su *ausencia* — es la única forma de que siga siendo cierto cuando la copy evolucione. La única card destacada es la del plan actual, que es información, no persuasión.
 - **Memoria (Pantalla 12) tiene los botones "Exportar mis datos"/"Borrar todo mi historial" visibles pero sin backend detrás.** El spec es explícito en que deben ser visibles (no escondidos en Ajustes), pero el backend no tiene ningún endpoint de exportación/borrado de datos todavía — tocarlos muestra un aviso "llega en un próximo módulo" en vez de fingir la acción. `bias.bias` se renderiza tal cual lo escribió el LLM (docs/REALITY_ENGINE.md Agente 5/12: es texto libre en español, no un código), así que no hay tabla de traducción cliente-side que mantener sincronizada.
 
 ## Desarrollo local

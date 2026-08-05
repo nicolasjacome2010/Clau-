@@ -11,4 +11,8 @@ abstract final class AppRoutes {
 
   /// Pushed with a `DecisionRef` (id + title) as `extra`.
   static const decisionResult = '/decision-result';
+
+  /// Pantalla 14 — pushed from Home's account icon (docs/PRD.md §9
+  /// hangs Suscripción off Home, not off the nav shell's 4 destinations).
+  static const subscription = '/subscription';
 }
