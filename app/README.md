@@ -1,6 +1,6 @@
 # VAR OS — App (Flutter)
 
-Cliente Flutter (docs/ARCHITECTURE.md §3, docs/UX_DESIGN.md). **Estado actual: fundación + Pantallas 1, 2, 3, 4, 5, 7, 9, 10, 11, 12 y 13 implementadas end to end (Splash → Onboarding → Auth → Home → Clarificación → Resultados/Síntesis → Cierre de ciclo, + Mis Decisiones, Memoria y Perfil de Objetivos en el nav shell), y la creación de decisiones, la simulación y el cierre de ciclo funcionan contra el backend real.** Los 4 destinos del nav shell son reales: ya no queda ningún placeholder. El resto de `docs/UX_DESIGN.md` §2 (Simulación en vivo, Comparación, Suscripción, Ajustes) es diseño, no código todavía — no asumas que existen solo porque están documentadas (misma regla que `CLAUDE.md` aplica al resto del repo).
+Cliente Flutter (docs/ARCHITECTURE.md §3, docs/UX_DESIGN.md). **Estado actual: fundación + Pantallas 1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12 y 13 implementadas end to end (Splash → Onboarding → Auth → Home → Clarificación → Resultados/Comparación/Síntesis → Cierre de ciclo, + Mis Decisiones, Memoria y Perfil de Objetivos en el nav shell), con auth real de Supabase y todo lo demás contra el backend real.** Los 4 destinos del nav shell son reales: ya no queda ningún placeholder. Solo quedan de `docs/UX_DESIGN.md` §2 la Pantalla 6 (Simulación en vivo), la 14 (Suscripción) y la 15 (Ajustes) — diseño, no código todavía; no asumas que existen solo porque están documentadas (misma regla que `CLAUDE.md` aplica al resto del repo).
 
 ## Estructura
 
@@ -62,8 +62,8 @@ lib/
         controllers/bias_profile_controller.dart # AsyncNotifier, refresh()
         widgets/                  # calibration_gauge.dart, bias_pattern_card.dart,
                                    # memory_tab_content.dart (botones GDPR incl.)
-    simulations/               # Pantallas 7 + 9 + 11 — escenarios, síntesis y cierre de ciclo,
-                               # REAL. Se abre tocando cualquier decisión (Home o Mis Decisiones)
+    simulations/               # Pantallas 7 + 8 + 9 + 11 — escenarios, comparación, síntesis y
+                               # cierre de ciclo, REAL. Se abre tocando cualquier decisión
       domain/                    # Simulation, SimulationScenario, GoalAlignment,
                                  # SafetyGateResult (requiresReferral), DecisionOutcome,
                                  # SimulationsRepository (+ errores tipados 409/503)
@@ -80,7 +80,8 @@ lib/
         widgets/                  # score_bar.dart (0-100 con polaridad), scenario_card.dart,
                                    # synthesis_section.dart, safety_referral.dart,
                                    # running_indicator.dart, outcome_section.dart,
-                                   # calibration_needle.dart
+                                   # calibration_needle.dart, comparison_view.dart
+                                   # (tabla real en desktop / swipe por criterio en mobile)
     shared/presentation/       # widgets que ninguna feature es dueña: step_indicator.dart
                                # (Onboarding y Clarificación)
 test/
@@ -113,6 +114,10 @@ test/
 - **Si `GET /v1/outcomes` falla, el prompt igual se ofrece.** Es mucho más probable que el ciclo esté abierto a que esté cerrado, y el `POST` responde 409 si no lo está — esconder el prompt costaría más que un 409 ocasional.
 - **El resultado de la calibración se muestra crudo, sin interpretarlo.** `calibration_delta` va de -100 a 100 y ni docs/REALITY_ENGINE.md define qué significa su signo — `UserBiasProfile.with_calibration_delta` llama a su propia fórmula "a starting formula, not a validated calibration model". La aguja anima de 0 al valor reportado (la microinteracción que pide el spec: "una aguja que se ajusta sutilmente") y el número se muestra tal cual; no hay copy del tipo "¡acertamos un 72%!". Lo que sí se muestra en palabras es `system_errors_identified`: en qué se equivocó la simulación, según el propio Agente 12.
 - **Un `closest_scenario_id` nulo se dice, no se disimula.** docs/REALITY_ENGINE.md §2 trata "lo que pasó no se parece a ningún escenario" como un resultado valioso —un punto ciego del sistema— y prohíbe forzar una coincidencia; el cliente lo enuncia como tal en vez de elegir el escenario más cercano por su cuenta.
+- **La comparación (Pantalla 8) es una vista de la misma pantalla de resultados, no una ruta aparte.** El spec las llama "Resultado: Vista Escenarios" y "Resultado: Vista Comparación"; volver a pedir la misma simulación para mostrar los mismos números de otra forma sería trabajo que nadie pidió. El toggle solo aparece con dos o más escenarios — con uno solo no hay nada contra qué compararlo.
+- **La alineación se muestra una fila por objetivo, nunca promediada.** El wireframe dibuja una sola fila "Alineación objetivo", pero cada escenario trae un score por objetivo y el cliente no recibe los pesos relativos del usuario; promediarlos inventaría una ponderación igualitaria y la presentaría como opinión del sistema. Cada objetivo tiene su fila y el usuario pondera — que es la postura del producto entero.
+- **Un objetivo contra el que un escenario nunca fue evaluado se muestra como "—", no como 0.** "Sin dato" y "sale pésimo" son afirmaciones distintas.
+- **La probabilidad relativa se dibuja en color neutro** (`ScorePolarity.neutral`): un 38% de probabilidad no es una buena ni una mala noticia, y pintarlo de verde o rojo afirmaría una opinión que el sistema no tiene.
 - **Memoria (Pantalla 12) tiene los botones "Exportar mis datos"/"Borrar todo mi historial" visibles pero sin backend detrás.** El spec es explícito en que deben ser visibles (no escondidos en Ajustes), pero el backend no tiene ningún endpoint de exportación/borrado de datos todavía — tocarlos muestra un aviso "llega en un próximo módulo" en vez de fingir la acción. `bias.bias` se renderiza tal cual lo escribió el LLM (docs/REALITY_ENGINE.md Agente 5/12: es texto libre en español, no un código), así que no hay tabla de traducción cliente-side que mantener sincronizada.
 
 ## Desarrollo local

@@ -4,7 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../design_system/var_colors.dart';
 import '../../../../design_system/var_spacing.dart';
 import '../../../../design_system/var_typography.dart';
+import '../../domain/simulation.dart';
 import '../controllers/decision_simulation_controller.dart';
+import '../widgets/comparison_view.dart';
 import '../widgets/outcome_section.dart';
 import '../widgets/running_indicator.dart';
 import '../widgets/safety_referral.dart';
@@ -111,13 +113,7 @@ class _Body extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(VarSpacing.lg),
       children: [
-        Text(
-          'Escenarios',
-          style: VarTypography.display(20, VarColors.textPrimaryDark),
-        ),
-        const SizedBox(height: VarSpacing.sm),
-        for (final scenario in simulation.rankedScenarios)
-          ScenarioCard(scenario: scenario),
+        _ResultViews(scenarios: simulation.rankedScenarios),
         if (simulation.synthesisText != null) ...[
           const SizedBox(height: VarSpacing.md),
           SynthesisSection(
@@ -142,6 +138,61 @@ class _Body extends StatelessWidget {
             style: VarTypography.body(12, VarColors.signalLowDark),
           ),
         OutlinedButton(onPressed: onRun, child: const Text('Simular de nuevo')),
+      ],
+    );
+  }
+}
+
+/// Pantallas 7 and 8 are two views of the same result, so they share one
+/// screen and a toggle rather than a second route: the spec names them
+/// "Resultado: Vista Escenarios" and "Resultado: Vista Comparación", and
+/// re-fetching the same simulation to show the same numbers differently
+/// would be work no user asked for.
+///
+/// The toggle only appears with two or more scenarios — there is nothing to
+/// compare a single scenario against, and offering the view anyway would be
+/// an empty promise.
+class _ResultViews extends StatefulWidget {
+  const _ResultViews({required this.scenarios});
+
+  final List<SimulationScenario> scenarios;
+
+  @override
+  State<_ResultViews> createState() => _ResultViewsState();
+}
+
+class _ResultViewsState extends State<_ResultViews> {
+  bool _comparing = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final canCompare = widget.scenarios.length > 1;
+    final comparing = _comparing && canCompare;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                comparing ? 'Comparación' : 'Escenarios',
+                style: VarTypography.display(20, VarColors.textPrimaryDark),
+              ),
+            ),
+            if (canCompare)
+              TextButton(
+                onPressed: () => setState(() => _comparing = !comparing),
+                child: Text(comparing ? 'Ver escenarios' : 'Comparar'),
+              ),
+          ],
+        ),
+        const SizedBox(height: VarSpacing.sm),
+        if (comparing)
+          ComparisonView(scenarios: widget.scenarios)
+        else
+          for (final scenario in widget.scenarios)
+            ScenarioCard(scenario: scenario),
       ],
     );
   }

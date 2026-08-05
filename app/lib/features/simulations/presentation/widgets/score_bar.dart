@@ -9,7 +9,11 @@ import '../../../../design_system/var_typography.dart';
 /// "higher is better"; risk reads the other way — so the same 72 is a green
 /// bar on one row and a red one on the next, and hardcoding "high = green"
 /// would have quietly mislabelled every risk score.
-enum ScorePolarity { higherIsBetter, lowerIsBetter }
+///
+/// `neutral` is for magnitudes that are neither: a scenario's relative
+/// probability is not good news or bad news, and coloring it green or red
+/// would state an opinion the system doesn't hold.
+enum ScorePolarity { higherIsBetter, lowerIsBetter, neutral }
 
 /// A labelled 0-100 score bar (docs/UX_DESIGN.md Pantalla 7).
 ///
@@ -63,12 +67,18 @@ class _ScoreBarState extends State<ScoreBar> {
   double get _targetFraction => (widget.score.clamp(0, 100)) / 100;
 
   Color get _color {
-    final good = widget.polarity == ScorePolarity.higherIsBetter
-        ? widget.score
-        : 100 - widget.score;
-    if (good >= 66) return VarColors.signalHighDark;
-    if (good >= 33) return VarColors.signalMediumDark;
-    return VarColors.signalLowDark;
+    switch (widget.polarity) {
+      case ScorePolarity.neutral:
+        return VarColors.accentPrimary;
+      case ScorePolarity.higherIsBetter:
+      case ScorePolarity.lowerIsBetter:
+        final good = widget.polarity == ScorePolarity.higherIsBetter
+            ? widget.score
+            : 100 - widget.score;
+        if (good >= 66) return VarColors.signalHighDark;
+        if (good >= 33) return VarColors.signalMediumDark;
+        return VarColors.signalLowDark;
+    }
   }
 
   @override
@@ -85,10 +95,18 @@ class _ScoreBarState extends State<ScoreBar> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  widget.label,
-                  style: VarTypography.body(12, VarColors.textSecondaryDark),
+                // The label can be a user-written scenario title, so it
+                // takes the slack and truncates; the number never does —
+                // it's the part that must stay readable.
+                Expanded(
+                  child: Text(
+                    widget.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: VarTypography.body(12, VarColors.textSecondaryDark),
+                  ),
                 ),
+                const SizedBox(width: VarSpacing.sm),
                 Text(
                   '$rounded%',
                   style: VarTypography.mono(12, VarColors.textPrimaryDark),
