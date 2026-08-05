@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../design_system/var_colors.dart';
+import '../../../../design_system/var_palette.dart';
 import '../../../../design_system/var_spacing.dart';
 import '../../../../design_system/var_typography.dart';
 
@@ -30,22 +30,22 @@ class SafetyReferral extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(VarSpacing.lg),
       decoration: BoxDecoration(
-        color: VarColors.bgElevatedDark,
+        color: context.varColors.bgElevated,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: VarColors.signalMediumDark),
+        border: Border.all(color: context.varColors.signalMedium),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             'Esto merece más que una simulación',
-            style: VarTypography.display(20, VarColors.textPrimaryDark),
+            style: VarTypography.display(20, context.varColors.textPrimary),
           ),
           const SizedBox(height: VarSpacing.md),
           Text(
             'Por lo que escribiste, generar escenarios no es lo que necesitas '
             'ahora mismo — y fingir que sí sería irresponsable de nuestra parte.',
-            style: VarTypography.body(16, VarColors.textPrimaryDark),
+            style: VarTypography.body(16, context.varColors.textPrimary),
           ),
           const SizedBox(height: VarSpacing.sm),
           Text(
@@ -53,12 +53,12 @@ class SafetyReferral extends StatelessWidget {
             'confianza, va a ayudarte más que cualquier cosa que podamos '
             'calcular. Si estás en peligro inmediato, contacta a los servicios '
             'de emergencia de tu país.',
-            style: VarTypography.body(16, VarColors.textPrimaryDark),
+            style: VarTypography.body(16, context.varColors.textPrimary),
           ),
           const SizedBox(height: VarSpacing.md),
           Text(
             'Tu decisión quedó guardada. Podés volver cuando quieras.',
-            style: VarTypography.body(12, VarColors.textSecondaryDark),
+            style: VarTypography.body(12, context.varColors.textSecondary),
           ),
         ],
       ),

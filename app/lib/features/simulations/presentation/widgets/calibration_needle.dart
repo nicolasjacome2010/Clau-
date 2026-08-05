@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../design_system/var_colors.dart';
+import '../../../../design_system/var_palette.dart';
 import '../../../../design_system/var_motion.dart';
 import '../../../../design_system/var_spacing.dart';
 import '../../../../design_system/var_typography.dart';
@@ -65,11 +65,11 @@ class _CalibrationNeedleState extends State<CalibrationNeedle> {
             children: [
               Text(
                 'Ajuste de calibración',
-                style: VarTypography.body(12, VarColors.textSecondaryDark),
+                style: VarTypography.body(12, context.varColors.textSecondary),
               ),
               Text(
                 clamped.toStringAsFixed(0),
-                style: VarTypography.mono(16, VarColors.accentPrimary),
+                style: VarTypography.mono(16, context.varColors.accentPrimary),
               ),
             ],
           ),
@@ -92,7 +92,7 @@ class _CalibrationNeedleState extends State<CalibrationNeedle> {
                       child: Container(
                         height: 6,
                         decoration: BoxDecoration(
-                          color: VarColors.dividerDark,
+                          color: context.varColors.divider,
                           borderRadius: BorderRadius.circular(3),
                         ),
                       ),
@@ -106,7 +106,7 @@ class _CalibrationNeedleState extends State<CalibrationNeedle> {
                         width: needleWidth,
                         height: height,
                         decoration: BoxDecoration(
-                          color: VarColors.accentPrimary,
+                          color: context.varColors.accentPrimary,
                           borderRadius: BorderRadius.circular(2),
                         ),
                       ),
@@ -122,15 +122,15 @@ class _CalibrationNeedleState extends State<CalibrationNeedle> {
             children: [
               Text(
                 '-100',
-                style: VarTypography.mono(12, VarColors.textSecondaryDark),
+                style: VarTypography.mono(12, context.varColors.textSecondary),
               ),
               Text(
                 '0',
-                style: VarTypography.mono(12, VarColors.textSecondaryDark),
+                style: VarTypography.mono(12, context.varColors.textSecondary),
               ),
               Text(
                 '100',
-                style: VarTypography.mono(12, VarColors.textSecondaryDark),
+                style: VarTypography.mono(12, context.varColors.textSecondary),
               ),
             ],
           ),

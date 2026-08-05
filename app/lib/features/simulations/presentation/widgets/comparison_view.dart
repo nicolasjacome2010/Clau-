@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../design_system/var_breakpoints.dart';
-import '../../../../design_system/var_colors.dart';
+import '../../../../design_system/var_palette.dart';
 import '../../../../design_system/var_spacing.dart';
 import '../../../../design_system/var_typography.dart';
 import '../../domain/simulation.dart';
@@ -167,7 +167,7 @@ class _SwipeableCriteriaState extends State<_SwipeableCriteria> {
                       group.title,
                       style: VarTypography.display(
                         16,
-                        VarColors.textPrimaryDark,
+                        context.varColors.textPrimary,
                       ),
                     ),
                     const SizedBox(height: VarSpacing.sm),
@@ -179,7 +179,7 @@ class _SwipeableCriteriaState extends State<_SwipeableCriteria> {
                             criterion.label,
                             style: VarTypography.body(
                               12,
-                              VarColors.textSecondaryDark,
+                              context.varColors.textSecondary,
                               weight: FontWeight.w600,
                             ),
                           ),
@@ -211,8 +211,8 @@ class _SwipeableCriteriaState extends State<_SwipeableCriteria> {
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: index == _page
-                        ? VarColors.accentPrimary
-                        : VarColors.dividerDark,
+                        ? context.varColors.accentPrimary
+                        : context.varColors.divider,
                   ),
                 ),
               ),
@@ -225,7 +225,7 @@ class _SwipeableCriteriaState extends State<_SwipeableCriteria> {
           child: Text(
             '${widget.groups[_page].title} · ${_page + 1} de ${widget.groups.length} · deslizá para ver más',
             textAlign: TextAlign.center,
-            style: VarTypography.body(12, VarColors.textSecondaryDark),
+            style: VarTypography.body(12, context.varColors.textSecondary),
           ),
         ),
       ],
@@ -273,13 +273,13 @@ class _MissingValue extends StatelessWidget {
                 label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: VarTypography.body(12, VarColors.textSecondaryDark),
+                style: VarTypography.body(12, context.varColors.textSecondary),
               ),
             ),
             const SizedBox(width: VarSpacing.sm),
             Text(
               '—',
-              style: VarTypography.mono(12, VarColors.textSecondaryDark),
+              style: VarTypography.mono(12, context.varColors.textSecondary),
             ),
           ],
         ),
@@ -315,7 +315,7 @@ class _ComparisonTable extends StatelessWidget {
                 text: 'Criterio',
                 style: VarTypography.body(
                   12,
-                  VarColors.textSecondaryDark,
+                  context.varColors.textSecondary,
                   weight: FontWeight.w600,
                 ),
               ),
@@ -325,8 +325,8 @@ class _ComparisonTable extends StatelessWidget {
                   style: VarTypography.display(
                     16,
                     scenario.isTopRanked
-                        ? VarColors.accentPrimary
-                        : VarColors.textPrimaryDark,
+                        ? context.varColors.accentPrimary
+                        : context.varColors.textPrimary,
                   ),
                 ),
             ],
@@ -336,7 +336,10 @@ class _ComparisonTable extends StatelessWidget {
               children: [
                 _HeaderCell(
                   text: criterion.label,
-                  style: VarTypography.body(12, VarColors.textSecondaryDark),
+                  style: VarTypography.body(
+                    12,
+                    context.varColors.textSecondary,
+                  ),
                 ),
                 for (final scenario in scenarios)
                   Padding(

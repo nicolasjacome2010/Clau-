@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../design_system/var_colors.dart';
+import '../../../../design_system/var_palette.dart';
 import '../../../../design_system/var_motion.dart';
 import '../../../../design_system/var_spacing.dart';
 import '../../../../design_system/var_typography.dart';
@@ -69,15 +69,15 @@ class _ScoreBarState extends State<ScoreBar> {
   Color get _color {
     switch (widget.polarity) {
       case ScorePolarity.neutral:
-        return VarColors.accentPrimary;
+        return context.varColors.accentPrimary;
       case ScorePolarity.higherIsBetter:
       case ScorePolarity.lowerIsBetter:
         final good = widget.polarity == ScorePolarity.higherIsBetter
             ? widget.score
             : 100 - widget.score;
-        if (good >= 66) return VarColors.signalHighDark;
-        if (good >= 33) return VarColors.signalMediumDark;
-        return VarColors.signalLowDark;
+        if (good >= 66) return context.varColors.signalHigh;
+        if (good >= 33) return context.varColors.signalMedium;
+        return context.varColors.signalLow;
     }
   }
 
@@ -103,13 +103,16 @@ class _ScoreBarState extends State<ScoreBar> {
                     widget.label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: VarTypography.body(12, VarColors.textSecondaryDark),
+                    style: VarTypography.body(
+                      12,
+                      context.varColors.textSecondary,
+                    ),
                   ),
                 ),
                 const SizedBox(width: VarSpacing.sm),
                 Text(
                   '$rounded%',
-                  style: VarTypography.mono(12, VarColors.textPrimaryDark),
+                  style: VarTypography.mono(12, context.varColors.textPrimary),
                 ),
               ],
             ),
@@ -118,7 +121,7 @@ class _ScoreBarState extends State<ScoreBar> {
               borderRadius: BorderRadius.circular(3),
               child: Stack(
                 children: [
-                  Container(height: 6, color: VarColors.dividerDark),
+                  Container(height: 6, color: context.varColors.divider),
                   AnimatedFractionallySizedBox(
                     duration: _fillDuration,
                     curve: VarMotion.enter,

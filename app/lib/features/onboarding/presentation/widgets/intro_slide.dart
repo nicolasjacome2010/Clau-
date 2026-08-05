@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../design_system/var_colors.dart';
+import '../../../../design_system/var_palette.dart';
 import '../../../../design_system/var_spacing.dart';
 import '../../../../design_system/var_typography.dart';
 
@@ -32,7 +33,7 @@ class IntroSlide extends StatelessWidget {
           Text(
             headline,
             textAlign: TextAlign.center,
-            style: VarTypography.display(25, VarColors.textPrimaryDark),
+            style: VarTypography.display(25, context.varColors.textPrimary),
           ),
         ],
       ),

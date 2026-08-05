@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../design_system/var_colors.dart';
+import '../../../design_system/var_palette.dart';
 import '../../../design_system/var_motion.dart';
 
 /// The "● ○ ○" progress dots, shared by every multi-step flow — Onboarding
@@ -32,7 +32,9 @@ class StepIndicator extends StatelessWidget {
             width: isActive ? 20 : 8,
             height: 8,
             decoration: BoxDecoration(
-              color: isActive ? VarColors.accentPrimary : VarColors.dividerDark,
+              color: isActive
+                  ? context.varColors.accentPrimary
+                  : context.varColors.divider,
               borderRadius: BorderRadius.circular(4),
             ),
           );

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../design_system/var_colors.dart';
+import '../../../../design_system/var_palette.dart';
 import '../../../../design_system/var_spacing.dart';
 import '../../../../design_system/var_typography.dart';
 
@@ -32,11 +32,11 @@ class CalibrationGauge extends StatelessWidget {
             children: [
               Text(
                 'Calibración',
-                style: VarTypography.display(16, VarColors.textPrimaryDark),
+                style: VarTypography.display(16, context.varColors.textPrimary),
               ),
               Text(
                 clamped.toStringAsFixed(0),
-                style: VarTypography.mono(16, VarColors.accentPrimary),
+                style: VarTypography.mono(16, context.varColors.accentPrimary),
               ),
             ],
           ),
@@ -57,7 +57,7 @@ class CalibrationGauge extends StatelessWidget {
                       child: Container(
                         height: 8,
                         decoration: BoxDecoration(
-                          color: VarColors.dividerDark,
+                          color: context.varColors.divider,
                           borderRadius: BorderRadius.circular(4),
                         ),
                       ),
@@ -67,8 +67,8 @@ class CalibrationGauge extends StatelessWidget {
                       child: Container(
                         width: dotSize,
                         height: dotSize,
-                        decoration: const BoxDecoration(
-                          color: VarColors.accentPrimary,
+                        decoration: BoxDecoration(
+                          color: context.varColors.accentPrimary,
                           shape: BoxShape.circle,
                         ),
                       ),

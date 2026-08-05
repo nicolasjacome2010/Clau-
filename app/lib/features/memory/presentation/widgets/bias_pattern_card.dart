@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../design_system/var_colors.dart';
+import '../../../../design_system/var_palette.dart';
 import '../../../../design_system/var_spacing.dart';
 import '../../../../design_system/var_typography.dart';
 import '../../domain/user_bias_profile.dart';
@@ -27,7 +27,7 @@ class BiasPatternCard extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: VarSpacing.sm),
         padding: const EdgeInsets.all(VarSpacing.md),
         decoration: BoxDecoration(
-          color: VarColors.bgSurfaceDark,
+          color: context.varColors.bgSurface,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(
@@ -37,14 +37,14 @@ class BiasPatternCard extends StatelessWidget {
               observation.bias,
               style: VarTypography.body(
                 14,
-                VarColors.textPrimaryDark,
+                context.varColors.textPrimary,
                 weight: FontWeight.w600,
               ),
             ),
             const SizedBox(height: VarSpacing.xs),
             Text(
               evidence,
-              style: VarTypography.body(12, VarColors.textSecondaryDark),
+              style: VarTypography.body(12, context.varColors.textSecondary),
             ),
             const SizedBox(height: VarSpacing.sm),
             ClipRRect(
@@ -52,16 +52,16 @@ class BiasPatternCard extends StatelessWidget {
               child: LinearProgressIndicator(
                 value: observation.score.clamp(0.0, 1.0),
                 minHeight: 6,
-                backgroundColor: VarColors.dividerDark,
-                valueColor: const AlwaysStoppedAnimation(
-                  VarColors.accentPrimary,
+                backgroundColor: context.varColors.divider,
+                valueColor: AlwaysStoppedAnimation(
+                  context.varColors.accentPrimary,
                 ),
               ),
             ),
             const SizedBox(height: VarSpacing.xs),
             Text(
               '$percentage%',
-              style: VarTypography.mono(12, VarColors.textSecondaryDark),
+              style: VarTypography.mono(12, context.varColors.textSecondary),
             ),
           ],
         ),

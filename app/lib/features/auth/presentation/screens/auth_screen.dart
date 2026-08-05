@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/routing/app_routes.dart';
-import '../../../../design_system/var_colors.dart';
+import '../../../../design_system/var_palette.dart';
 import '../../../../design_system/var_spacing.dart';
 import '../../../../design_system/var_typography.dart';
 import '../controllers/auth_controller.dart';
@@ -40,7 +40,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     final isSubmitting = state.status == AuthStatus.submitting;
 
     return Scaffold(
-      backgroundColor: VarColors.bgPrimaryDark,
+      backgroundColor: context.varColors.bgPrimary,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: VarSpacing.xl),
@@ -51,20 +51,20 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
               Text(
                 'Entra a VAR OS',
                 textAlign: TextAlign.center,
-                style: VarTypography.display(25, VarColors.textPrimaryDark),
+                style: VarTypography.display(25, context.varColors.textPrimary),
               ),
               const SizedBox(height: VarSpacing.lg),
               TextField(
                 controller: _emailController,
                 keyboardType: TextInputType.emailAddress,
-                style: VarTypography.body(16, VarColors.textPrimaryDark),
+                style: VarTypography.body(16, context.varColors.textPrimary),
                 decoration: const InputDecoration(hintText: 'tu@email.com'),
               ),
               if (state.status == AuthStatus.error) ...[
                 const SizedBox(height: VarSpacing.sm),
                 Text(
                   state.errorMessage ?? 'Algo salió mal',
-                  style: VarTypography.body(12, VarColors.signalLowDark),
+                  style: VarTypography.body(12, context.varColors.signalLow),
                 ),
               ],
               const SizedBox(height: VarSpacing.md),
@@ -86,7 +86,10 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                 onPressed: isSubmitting ? null : controller.continueAnonymously,
                 child: Text(
                   'Probar una simulación primero',
-                  style: VarTypography.body(14, VarColors.textSecondaryDark),
+                  style: VarTypography.body(
+                    14,
+                    context.varColors.textSecondary,
+                  ),
                 ),
               ),
             ],

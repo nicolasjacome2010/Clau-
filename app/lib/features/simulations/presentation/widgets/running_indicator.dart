@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../../../design_system/var_colors.dart';
+import '../../../../design_system/var_palette.dart';
 import '../../../../design_system/var_spacing.dart';
 import '../../../../design_system/var_typography.dart';
 
@@ -55,14 +55,14 @@ class _RunningIndicatorState extends State<RunningIndicator> {
             const SizedBox(height: VarSpacing.lg),
             Text(
               'Simulando tus escenarios…',
-              style: VarTypography.body(16, VarColors.textPrimaryDark),
+              style: VarTypography.body(16, context.varColors.textPrimary),
             ),
             if (_showReassurance) ...[
               const SizedBox(height: VarSpacing.sm),
               Text(
                 'Los escenarios complejos toman un poco más — vale la pena.',
                 textAlign: TextAlign.center,
-                style: VarTypography.body(12, VarColors.textSecondaryDark),
+                style: VarTypography.body(12, context.varColors.textSecondary),
               ),
             ],
           ],

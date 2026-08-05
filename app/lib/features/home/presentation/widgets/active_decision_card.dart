@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/routing/app_routes.dart';
-import '../../../../design_system/var_colors.dart';
+import '../../../../design_system/var_palette.dart';
 import '../../../../design_system/var_spacing.dart';
 import '../../../../design_system/var_typography.dart';
 import '../../../decisions/domain/decision_ref.dart';
@@ -26,7 +26,7 @@ class ActiveDecisionCard extends StatelessWidget {
         // inner `Container`'s decoration) so the tap ripple draws *on* the card
         // instead of on the Scaffold underneath it, where it would be hidden.
         child: Material(
-          color: VarColors.bgSurfaceDark,
+          color: context.varColors.bgSurface,
           borderRadius: BorderRadius.circular(12),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
@@ -42,7 +42,7 @@ class ActiveDecisionCard extends StatelessWidget {
               decoration: BoxDecoration(
                 border: Border(
                   left: BorderSide(
-                    color: decisionStatusColor(decision.status),
+                    color: decisionStatusColor(context, decision.status),
                     width: 3,
                   ),
                 ),
@@ -58,14 +58,17 @@ class ActiveDecisionCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: VarTypography.body(
                       14,
-                      VarColors.textPrimaryDark,
+                      context.varColors.textPrimary,
                       weight: FontWeight.w600,
                     ),
                   ),
                   const SizedBox(height: VarSpacing.xs),
                   Text(
                     decisionStatusLabel(decision.status),
-                    style: VarTypography.body(12, VarColors.textSecondaryDark),
+                    style: VarTypography.body(
+                      12,
+                      context.varColors.textSecondary,
+                    ),
                   ),
                 ],
               ),

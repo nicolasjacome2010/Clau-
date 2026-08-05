@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../design_system/var_colors.dart';
+import '../../../../design_system/var_palette.dart';
 import '../../../../design_system/var_spacing.dart';
 import '../../../../design_system/var_typography.dart';
 import '../../../goals/domain/goal_option.dart';
@@ -41,7 +41,7 @@ class _GoalSelectionStepState extends ConsumerState<GoalSelectionStep> {
           Text(
             '¿Qué te importa más ahora mismo?',
             textAlign: TextAlign.center,
-            style: VarTypography.display(20, VarColors.textPrimaryDark),
+            style: VarTypography.display(20, context.varColors.textPrimary),
           ),
           const SizedBox(height: VarSpacing.lg),
           Wrap(
@@ -62,7 +62,7 @@ class _GoalSelectionStepState extends ConsumerState<GoalSelectionStep> {
           const SizedBox(height: VarSpacing.lg),
           TextField(
             controller: _customGoalController,
-            style: VarTypography.body(16, VarColors.textPrimaryDark),
+            style: VarTypography.body(16, context.varColors.textPrimary),
             decoration: const InputDecoration(hintText: 'Otro objetivo…'),
             onSubmitted: (value) {
               controller.addCustomGoal(value);

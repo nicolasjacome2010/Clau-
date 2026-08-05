@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../design_system/var_colors.dart';
+import '../../../../design_system/var_palette.dart';
 import '../../../../design_system/var_spacing.dart';
 import '../../../../design_system/var_typography.dart';
 import '../../../decisions/presentation/controllers/decisions_controller.dart';
@@ -30,7 +30,7 @@ class ActiveDecisionsSection extends ConsumerWidget {
       children: [
         Text(
           'Decisiones activas',
-          style: VarTypography.display(16, VarColors.textPrimaryDark),
+          style: VarTypography.display(16, context.varColors.textPrimary),
         ),
         const SizedBox(height: VarSpacing.sm),
         SizedBox(
@@ -42,7 +42,7 @@ class ActiveDecisionsSection extends ConsumerWidget {
                       'Aún no tienes decisiones activas.',
                       style: VarTypography.body(
                         14,
-                        VarColors.textSecondaryDark,
+                        context.varColors.textSecondary,
                       ),
                     ),
                   )
@@ -83,7 +83,7 @@ class _ActiveDecisionsError extends StatelessWidget {
         children: [
           Text(
             'No pudimos cargar tus decisiones.',
-            style: VarTypography.body(12, VarColors.signalLowDark),
+            style: VarTypography.body(12, context.varColors.signalLow),
           ),
           TextButton(onPressed: onRetry, child: const Text('Reintentar')),
         ],

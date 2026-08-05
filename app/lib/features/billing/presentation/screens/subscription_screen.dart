@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../design_system/var_colors.dart';
+import '../../../../design_system/var_palette.dart';
 import '../../../../design_system/var_spacing.dart';
 import '../../../../design_system/var_typography.dart';
 import '../../domain/subscription.dart';
@@ -21,12 +21,12 @@ class SubscriptionScreen extends ConsumerWidget {
     final asyncSubscription = ref.watch(subscriptionControllerProvider);
 
     return Scaffold(
-      backgroundColor: VarColors.bgPrimaryDark,
+      backgroundColor: context.varColors.bgPrimary,
       appBar: AppBar(
-        backgroundColor: VarColors.bgPrimaryDark,
+        backgroundColor: context.varColors.bgPrimary,
         title: Text(
           'Suscripción',
-          style: VarTypography.body(16, VarColors.textPrimaryDark),
+          style: VarTypography.body(16, context.varColors.textPrimary),
         ),
       ),
       body: SafeArea(
@@ -40,7 +40,7 @@ class SubscriptionScreen extends ConsumerWidget {
               children: [
                 Text(
                   'No pudimos cargar tu plan.',
-                  style: VarTypography.body(12, VarColors.signalLowDark),
+                  style: VarTypography.body(12, context.varColors.signalLow),
                 ),
                 TextButton(
                   onPressed: () => ref
@@ -102,7 +102,7 @@ class _Body extends ConsumerWidget {
               const SizedBox(width: VarSpacing.sm),
               Text(
                 'Abriendo Stripe…',
-                style: VarTypography.body(12, VarColors.textSecondaryDark),
+                style: VarTypography.body(12, context.varColors.textSecondary),
               ),
             ],
           ),
@@ -111,14 +111,14 @@ class _Body extends ConsumerWidget {
           const SizedBox(height: VarSpacing.md),
           Text(
             action.errorMessage!,
-            style: VarTypography.body(12, VarColors.signalLowDark),
+            style: VarTypography.body(12, context.varColors.signalLow),
           ),
         ],
         const SizedBox(height: VarSpacing.md),
         Text(
           'El pago se completa en Stripe, fuera de la app. Tu plan cambia '
           'cuando Stripe lo confirma.',
-          style: VarTypography.body(12, VarColors.textSecondaryDark),
+          style: VarTypography.body(12, context.varColors.textSecondary),
         ),
       ],
     );
@@ -162,7 +162,7 @@ class _StatusNote extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       _text,
-      style: VarTypography.body(14, VarColors.textPrimaryDark),
+      style: VarTypography.body(14, context.varColors.textPrimary),
     );
   }
 }

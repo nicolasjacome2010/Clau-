@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../design_system/var_colors.dart';
+import '../../../../design_system/var_palette.dart';
 import '../../../../design_system/var_motion.dart';
 import '../../../../design_system/var_spacing.dart';
 import '../../../../design_system/var_typography.dart';
@@ -38,14 +38,14 @@ class AnswerChip extends StatelessWidget {
             vertical: VarSpacing.sm,
           ),
           decoration: BoxDecoration(
-            color: VarColors.bgSurfaceDark,
+            color: context.varColors.bgSurface,
             borderRadius: BorderRadius.circular(VarSpacing.minTouchTarget / 2),
-            border: Border.all(color: VarColors.dividerDark),
+            border: Border.all(color: context.varColors.divider),
           ),
           alignment: Alignment.center,
           child: Text(
             label,
-            style: VarTypography.body(14, VarColors.textPrimaryDark),
+            style: VarTypography.body(14, context.varColors.textPrimary),
           ),
         ),
       ),

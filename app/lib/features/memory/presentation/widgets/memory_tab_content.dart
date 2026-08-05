@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../design_system/var_colors.dart';
+import '../../../../design_system/var_palette.dart';
 import '../../../../design_system/var_spacing.dart';
 import '../../../../design_system/var_typography.dart';
 import '../controllers/bias_profile_controller.dart';
@@ -38,13 +38,13 @@ class MemoryTabContent extends ConsumerWidget {
           const SizedBox(height: VarSpacing.xl),
           Text(
             'Patrones detectados',
-            style: VarTypography.display(16, VarColors.textPrimaryDark),
+            style: VarTypography.display(16, context.varColors.textPrimary),
           ),
           const SizedBox(height: VarSpacing.sm),
           if (profile.biases.isEmpty)
             Text(
               'Aún no hemos detectado patrones — esto aparecerá después de tus primeras simulaciones.',
-              style: VarTypography.body(14, VarColors.textSecondaryDark),
+              style: VarTypography.body(14, context.varColors.textSecondary),
             )
           else
             for (final observation in profile.biases)
@@ -59,7 +59,7 @@ class MemoryTabContent extends ConsumerWidget {
             onPressed: () =>
                 _showComingSoon(context, 'Borrar todo mi historial'),
             style: OutlinedButton.styleFrom(
-              foregroundColor: VarColors.signalLowDark,
+              foregroundColor: context.varColors.signalLow,
             ),
             child: const Text('Borrar todo mi historial'),
           ),
@@ -73,7 +73,7 @@ class MemoryTabContent extends ConsumerWidget {
           children: [
             Text(
               'No pudimos cargar tu memoria.',
-              style: VarTypography.body(12, VarColors.signalLowDark),
+              style: VarTypography.body(12, context.varColors.signalLow),
             ),
             TextButton(
               onPressed: () =>

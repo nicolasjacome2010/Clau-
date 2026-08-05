@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/routing/app_routes.dart';
-import '../../../../design_system/var_colors.dart';
+import '../../../../design_system/var_palette.dart';
 import '../../../../design_system/var_spacing.dart';
 import '../../../../design_system/var_typography.dart';
 import 'active_decisions_section.dart';
@@ -25,14 +25,14 @@ class HomeTabContent extends StatelessWidget {
             children: [
               Text(
                 'VAR OS',
-                style: VarTypography.display(20, VarColors.textPrimaryDark),
+                style: VarTypography.display(20, context.varColors.textPrimary),
               ),
               Row(
                 children: [
                   IconButton(
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.settings_outlined,
-                      color: VarColors.textSecondaryDark,
+                      color: context.varColors.textSecondary,
                     ),
                     tooltip: 'Ajustes',
                     // Pantalla 15 isn't built. Saying so beats an icon that
@@ -44,9 +44,9 @@ class HomeTabContent extends StatelessWidget {
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.person_outline,
-                      color: VarColors.textSecondaryDark,
+                      color: context.varColors.textSecondary,
                     ),
                     tooltip: 'Suscripción',
                     onPressed: () => context.push(AppRoutes.subscription),
@@ -58,7 +58,7 @@ class HomeTabContent extends StatelessWidget {
           const SizedBox(height: VarSpacing.xl),
           Text(
             '¿Qué decisión estás enfrentando?',
-            style: VarTypography.display(20, VarColors.textPrimaryDark),
+            style: VarTypography.display(20, context.varColors.textPrimary),
           ),
           const SizedBox(height: VarSpacing.md),
           const DecisionInputField(),

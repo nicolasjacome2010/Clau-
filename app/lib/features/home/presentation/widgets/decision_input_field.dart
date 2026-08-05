@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/routing/app_routes.dart';
-import '../../../../design_system/var_colors.dart';
+import '../../../../design_system/var_palette.dart';
 import '../../../../design_system/var_spacing.dart';
 import '../../../../design_system/var_typography.dart';
 
@@ -73,20 +73,23 @@ class _DecisionInputFieldState extends State<DecisionInputField> {
         vertical: VarSpacing.sm,
       ),
       decoration: BoxDecoration(
-        color: VarColors.bgSurfaceDark,
+        color: context.varColors.bgSurface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: VarColors.dividerDark),
+        border: Border.all(color: context.varColors.divider),
       ),
       child: Row(
         children: [
           Expanded(
             child: TextField(
               controller: _controller,
-              style: VarTypography.body(16, VarColors.textPrimaryDark),
+              style: VarTypography.body(16, context.varColors.textPrimary),
               decoration: InputDecoration(
                 border: InputBorder.none,
                 hintText: _examples[_exampleIndex],
-                hintStyle: VarTypography.body(16, VarColors.textSecondaryDark),
+                hintStyle: VarTypography.body(
+                  16,
+                  context.varColors.textSecondary,
+                ),
               ),
               onSubmitted: (_) => _startClarification(),
             ),
@@ -95,7 +98,10 @@ class _DecisionInputFieldState extends State<DecisionInputField> {
             button: true,
             label: 'Capturar por voz',
             child: IconButton(
-              icon: const Icon(Icons.mic_none, color: VarColors.accentPrimary),
+              icon: Icon(
+                Icons.mic_none,
+                color: context.varColors.accentPrimary,
+              ),
               onPressed: () => _showComingSoon('La captura de voz'),
             ),
           ),

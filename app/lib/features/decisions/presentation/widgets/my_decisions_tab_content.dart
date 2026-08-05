@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/routing/app_routes.dart';
-import '../../../../design_system/var_colors.dart';
+import '../../../../design_system/var_palette.dart';
 import '../../../../design_system/var_spacing.dart';
 import '../../../../design_system/var_typography.dart';
 import '../../../simulations/presentation/controllers/outcomes_controller.dart';
@@ -33,7 +33,7 @@ class MyDecisionsTabContent extends ConsumerWidget {
           return Center(
             child: Text(
               'Aún no tienes decisiones.',
-              style: VarTypography.body(14, VarColors.textSecondaryDark),
+              style: VarTypography.body(14, context.varColors.textSecondary),
             ),
           );
         }
@@ -65,7 +65,7 @@ class MyDecisionsTabContent extends ConsumerWidget {
           children: [
             Text(
               'No pudimos cargar tus decisiones.',
-              style: VarTypography.body(12, VarColors.signalLowDark),
+              style: VarTypography.body(12, context.varColors.signalLow),
             ),
             TextButton(
               onPressed: () =>
@@ -100,7 +100,7 @@ class _DecisionGroup extends StatelessWidget {
           ),
           child: Text(
             title,
-            style: VarTypography.display(16, VarColors.textPrimaryDark),
+            style: VarTypography.display(16, context.varColors.textPrimary),
           ),
         ),
         for (final decision in decisions) _DecisionListTile(decision: decision),
@@ -144,7 +144,7 @@ class _DecisionListTile extends ConsumerWidget {
         // Surface color on `Material` so the ripple lands on the tile itself —
         // same reasoning as `ActiveDecisionCard`.
         child: Material(
-          color: VarColors.bgSurfaceDark,
+          color: context.varColors.bgSurface,
           borderRadius: BorderRadius.circular(12),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
@@ -160,7 +160,7 @@ class _DecisionListTile extends ConsumerWidget {
               decoration: BoxDecoration(
                 border: Border(
                   left: BorderSide(
-                    color: decisionStatusColor(decision.status),
+                    color: decisionStatusColor(context, decision.status),
                     width: 3,
                   ),
                 ),
@@ -174,7 +174,7 @@ class _DecisionListTile extends ConsumerWidget {
                       overflow: TextOverflow.ellipsis,
                       style: VarTypography.body(
                         14,
-                        VarColors.textPrimaryDark,
+                        context.varColors.textPrimary,
                         weight: FontWeight.w600,
                       ),
                     ),
@@ -183,7 +183,10 @@ class _DecisionListTile extends ConsumerWidget {
                   if (isOpenLoop) const _OpenLoopMarker(),
                   Text(
                     decisionStatusLabel(decision.status),
-                    style: VarTypography.body(12, VarColors.textSecondaryDark),
+                    style: VarTypography.body(
+                      12,
+                      context.varColors.textSecondary,
+                    ),
                   ),
                 ],
               ),
@@ -214,15 +217,15 @@ class _OpenLoopMarker extends StatelessWidget {
           Container(
             width: 6,
             height: 6,
-            decoration: const BoxDecoration(
-              color: VarColors.signalMediumDark,
+            decoration: BoxDecoration(
+              color: context.varColors.signalMedium,
               shape: BoxShape.circle,
             ),
           ),
           const SizedBox(width: VarSpacing.xs),
           Text(
             'Sin cerrar',
-            style: VarTypography.body(12, VarColors.signalMediumDark),
+            style: VarTypography.body(12, context.varColors.signalMedium),
           ),
         ],
       ),

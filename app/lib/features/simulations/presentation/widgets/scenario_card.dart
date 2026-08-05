@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../design_system/var_colors.dart';
+import '../../../../design_system/var_palette.dart';
 import '../../../../design_system/var_motion.dart';
 import '../../../../design_system/var_spacing.dart';
 import '../../../../design_system/var_typography.dart';
@@ -43,12 +43,12 @@ class _ScenarioCardState extends State<ScenarioCard> {
           margin: const EdgeInsets.only(bottom: VarSpacing.md),
           padding: const EdgeInsets.all(VarSpacing.md),
           decoration: BoxDecoration(
-            color: VarColors.bgSurfaceDark,
+            color: context.varColors.bgSurface,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: scenario.isTopRanked
-                  ? VarColors.accentPrimary
-                  : VarColors.dividerDark,
+                  ? context.varColors.accentPrimary
+                  : context.varColors.divider,
               width: scenario.isTopRanked ? 2 : 1,
             ),
           ),
@@ -62,26 +62,29 @@ class _ScenarioCardState extends State<ScenarioCard> {
                       scenario.title,
                       style: VarTypography.display(
                         16,
-                        VarColors.textPrimaryDark,
+                        context.varColors.textPrimary,
                       ),
                     ),
                   ),
                   Text(
                     '${scenario.relativeProbability.round()}%',
-                    style: VarTypography.mono(16, VarColors.accentPrimary),
+                    style: VarTypography.mono(
+                      16,
+                      context.varColors.accentPrimary,
+                    ),
                   ),
                 ],
               ),
               Text(
                 'Probabilidad relativa · ${scenario.timeHorizonMonths} meses',
-                style: VarTypography.body(12, VarColors.textSecondaryDark),
+                style: VarTypography.body(12, context.varColors.textSecondary),
               ),
               const SizedBox(height: VarSpacing.sm),
               Text(
                 scenario.narrative,
                 maxLines: _expanded ? null : 2,
                 overflow: _expanded ? null : TextOverflow.ellipsis,
-                style: VarTypography.body(14, VarColors.textPrimaryDark),
+                style: VarTypography.body(14, context.varColors.textPrimary),
               ),
               const SizedBox(height: VarSpacing.md),
               for (final alignment in scenario.goalAlignmentScores)
@@ -105,7 +108,7 @@ class _ScenarioCardState extends State<ScenarioCard> {
                     'Supuestos',
                     style: VarTypography.body(
                       12,
-                      VarColors.textSecondaryDark,
+                      context.varColors.textSecondary,
                       weight: FontWeight.w600,
                     ),
                   ),
@@ -117,7 +120,7 @@ class _ScenarioCardState extends State<ScenarioCard> {
                         '· $assumption',
                         style: VarTypography.body(
                           12,
-                          VarColors.textSecondaryDark,
+                          context.varColors.textSecondary,
                         ),
                       ),
                     ),
@@ -130,14 +133,17 @@ class _ScenarioCardState extends State<ScenarioCard> {
                         '${alignment.goal}: ${alignment.justification}',
                         style: VarTypography.body(
                           12,
-                          VarColors.textSecondaryDark,
+                          context.varColors.textSecondary,
                         ),
                       ),
                     ),
               ] else
                 Text(
                   'Toca para ver supuestos',
-                  style: VarTypography.body(12, VarColors.textSecondaryDark),
+                  style: VarTypography.body(
+                    12,
+                    context.varColors.textSecondary,
+                  ),
                 ),
             ],
           ),

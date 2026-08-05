@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../design_system/var_colors.dart';
+import '../../../../design_system/var_palette.dart';
 import '../../../../design_system/var_spacing.dart';
 import '../../../../design_system/var_typography.dart';
 import '../../domain/simulation.dart';
@@ -39,12 +39,12 @@ class DecisionResultScreen extends ConsumerWidget {
     final asyncState = ref.watch(provider);
 
     return Scaffold(
-      backgroundColor: VarColors.bgPrimaryDark,
+      backgroundColor: context.varColors.bgPrimary,
       appBar: AppBar(
-        backgroundColor: VarColors.bgPrimaryDark,
+        backgroundColor: context.varColors.bgPrimary,
         title: Text(
           title,
-          style: VarTypography.body(16, VarColors.textPrimaryDark),
+          style: VarTypography.body(16, context.varColors.textPrimary),
         ),
       ),
       body: SafeArea(
@@ -135,7 +135,7 @@ class _Body extends StatelessWidget {
         if (state.errorMessage != null)
           Text(
             state.errorMessage!,
-            style: VarTypography.body(12, VarColors.signalLowDark),
+            style: VarTypography.body(12, context.varColors.signalLow),
           ),
         OutlinedButton(onPressed: onRun, child: const Text('Simular de nuevo')),
       ],
@@ -177,7 +177,7 @@ class _ResultViewsState extends State<_ResultViews> {
             Expanded(
               child: Text(
                 comparing ? 'Comparación' : 'Escenarios',
-                style: VarTypography.display(20, VarColors.textPrimaryDark),
+                style: VarTypography.display(20, context.varColors.textPrimary),
               ),
             ),
             if (canCompare)
@@ -222,14 +222,14 @@ class _CenteredMessage extends StatelessWidget {
             Text(
               message,
               textAlign: TextAlign.center,
-              style: VarTypography.body(16, VarColors.textPrimaryDark),
+              style: VarTypography.body(16, context.varColors.textPrimary),
             ),
             if (errorMessage != null) ...[
               const SizedBox(height: VarSpacing.sm),
               Text(
                 errorMessage!,
                 textAlign: TextAlign.center,
-                style: VarTypography.body(12, VarColors.signalLowDark),
+                style: VarTypography.body(12, context.varColors.signalLow),
               ),
             ],
             const SizedBox(height: VarSpacing.md),

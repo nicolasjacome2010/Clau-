@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../design_system/var_colors.dart';
+import '../../../../design_system/var_palette.dart';
 import '../../../../design_system/var_motion.dart';
 import '../../../../design_system/var_spacing.dart';
 import '../../../../design_system/var_typography.dart';
@@ -43,12 +43,12 @@ class ClarificationScreen extends ConsumerWidget {
     });
 
     return Scaffold(
-      backgroundColor: VarColors.bgPrimaryDark,
+      backgroundColor: context.varColors.bgPrimary,
       appBar: AppBar(
-        backgroundColor: VarColors.bgPrimaryDark,
+        backgroundColor: context.varColors.bgPrimary,
         title: Text(
           'Entendiendo tu decisión…',
-          style: VarTypography.body(16, VarColors.textSecondaryDark),
+          style: VarTypography.body(16, context.varColors.textSecondary),
         ),
       ),
       body: SafeArea(
@@ -59,12 +59,12 @@ class ClarificationScreen extends ConsumerWidget {
             children: [
               Text(
                 'Detecté que estás evaluando:',
-                style: VarTypography.body(14, VarColors.textSecondaryDark),
+                style: VarTypography.body(14, context.varColors.textSecondary),
               ),
               const SizedBox(height: VarSpacing.xs),
               Text(
                 rawInput,
-                style: VarTypography.display(20, VarColors.textPrimaryDark),
+                style: VarTypography.display(20, context.varColors.textPrimary),
               ),
               const SizedBox(height: VarSpacing.xl),
               Expanded(
@@ -77,7 +77,7 @@ class ClarificationScreen extends ConsumerWidget {
               if (state.status == ClarificationStatus.failed) ...[
                 Text(
                   state.errorMessage ?? 'Algo salió mal',
-                  style: VarTypography.body(12, VarColors.signalLowDark),
+                  style: VarTypography.body(12, context.varColors.signalLow),
                 ),
                 TextButton(
                   onPressed: controller.retry,
@@ -123,12 +123,12 @@ class _QuestionView extends StatelessWidget {
           children: [
             Text(
               'Antes de simular, necesito saber:',
-              style: VarTypography.body(14, VarColors.textSecondaryDark),
+              style: VarTypography.body(14, context.varColors.textSecondary),
             ),
             const SizedBox(height: VarSpacing.sm),
             Text(
               question.prompt,
-              style: VarTypography.display(20, VarColors.textPrimaryDark),
+              style: VarTypography.display(20, context.varColors.textPrimary),
             ),
             const SizedBox(height: VarSpacing.lg),
             Wrap(
@@ -146,7 +146,7 @@ class _QuestionView extends StatelessWidget {
             if (remaining > 0)
               Text(
                 remaining == 1 ? '1 pregunta más' : '$remaining preguntas más',
-                style: VarTypography.body(12, VarColors.textSecondaryDark),
+                style: VarTypography.body(12, context.varColors.textSecondary),
               ),
           ],
         ),

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../design_system/var_colors.dart';
+import '../../../../design_system/var_palette.dart';
 import '../../../../design_system/var_spacing.dart';
 import '../../../../design_system/var_typography.dart';
 import '../../domain/billing_plan.dart';
@@ -34,10 +34,12 @@ class PlanCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: VarSpacing.md),
       padding: const EdgeInsets.all(VarSpacing.md),
       decoration: BoxDecoration(
-        color: VarColors.bgSurfaceDark,
+        color: context.varColors.bgSurface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isCurrent ? VarColors.accentPrimary : VarColors.dividerDark,
+          color: isCurrent
+              ? context.varColors.accentPrimary
+              : context.varColors.divider,
           width: isCurrent ? 2 : 1,
         ),
       ),
@@ -49,20 +51,26 @@ class PlanCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   plan.name,
-                  style: VarTypography.display(20, VarColors.textPrimaryDark),
+                  style: VarTypography.display(
+                    20,
+                    context.varColors.textPrimary,
+                  ),
                 ),
               ),
               if (plan.priceLabel != null)
                 Text(
                   plan.priceLabel!,
-                  style: VarTypography.mono(16, VarColors.accentPrimary),
+                  style: VarTypography.mono(
+                    16,
+                    context.varColors.accentPrimary,
+                  ),
                 ),
             ],
           ),
           const SizedBox(height: VarSpacing.xs),
           Text(
             plan.tagline,
-            style: VarTypography.body(12, VarColors.textSecondaryDark),
+            style: VarTypography.body(12, context.varColors.textSecondary),
           ),
           const SizedBox(height: VarSpacing.md),
           for (final feature in plan.features)
@@ -70,7 +78,7 @@ class PlanCard extends StatelessWidget {
               padding: const EdgeInsets.only(bottom: 2),
               child: Text(
                 '· $feature',
-                style: VarTypography.body(14, VarColors.textPrimaryDark),
+                style: VarTypography.body(14, context.varColors.textPrimary),
               ),
             ),
           const SizedBox(height: VarSpacing.md),
@@ -79,7 +87,7 @@ class PlanCard extends StatelessWidget {
               'Tu plan actual',
               style: VarTypography.body(
                 12,
-                VarColors.accentPrimary,
+                context.varColors.accentPrimary,
                 weight: FontWeight.w600,
               ),
             )
@@ -94,7 +102,7 @@ class PlanCard extends StatelessWidget {
             // nothing honest to charge.
             Text(
               'Este plan no está disponible para compra en esta versión.',
-              style: VarTypography.body(12, VarColors.textSecondaryDark),
+              style: VarTypography.body(12, context.varColors.textSecondary),
             ),
         ],
       ),

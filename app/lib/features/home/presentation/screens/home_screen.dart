@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../design_system/var_breakpoints.dart';
-import '../../../../design_system/var_colors.dart';
+import '../../../../design_system/var_palette.dart';
 import '../../../decisions/presentation/widgets/my_decisions_tab_content.dart';
 import '../../../goals/presentation/widgets/goals_profile_tab_content.dart';
 import '../../../memory/presentation/widgets/memory_tab_content.dart';
@@ -51,7 +51,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final body = IndexedStack(index: _tabIndex, children: _tabs);
 
     return Scaffold(
-      backgroundColor: VarColors.bgPrimaryDark,
+      backgroundColor: context.varColors.bgPrimary,
       body: SafeArea(
         child: useRail
             ? Row(
@@ -70,7 +70,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                     ],
                   ),
-                  const VerticalDivider(width: 1, color: VarColors.dividerDark),
+                  VerticalDivider(width: 1, color: context.varColors.divider),
                   Expanded(child: body),
                 ],
               )

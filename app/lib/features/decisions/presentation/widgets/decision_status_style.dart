@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../design_system/var_colors.dart';
+import '../../../../design_system/var_palette.dart';
 
 /// Maps a `DecisionSummary.status` to a signal color and a Spanish label.
 ///
@@ -10,20 +10,22 @@ import '../../../../design_system/var_colors.dart';
 /// in Pantalla 10, "Mis Decisiones") extend the same scheme: `completed`
 /// gets `signal.high` (fully resolved), `archived` stays neutral like
 /// `draft` (no longer active, not a signal of anything).
-Color decisionStatusColor(String status) {
+/// Takes a `BuildContext` because the color it returns is theme-dependent
+/// — the same status is a different hex in light and dark.
+Color decisionStatusColor(BuildContext context, String status) {
   switch (status) {
     case 'draft':
-      return VarColors.dividerDark;
+      return context.varColors.divider;
     case 'clarifying':
-      return VarColors.signalLowDark;
+      return context.varColors.signalLow;
     case 'simulating':
-      return VarColors.signalMediumDark;
+      return context.varColors.signalMedium;
     case 'completed':
-      return VarColors.signalHighDark;
+      return context.varColors.signalHigh;
     case 'archived':
-      return VarColors.dividerDark;
+      return context.varColors.divider;
     default:
-      return VarColors.dividerDark;
+      return context.varColors.divider;
   }
 }
 

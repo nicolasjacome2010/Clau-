@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../design_system/var_colors.dart';
+import '../../../../design_system/var_palette.dart';
 import '../../../../design_system/var_spacing.dart';
 import '../../../../design_system/var_typography.dart';
 
@@ -25,7 +25,7 @@ class SynthesisSection extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(VarSpacing.md),
       decoration: BoxDecoration(
-        color: VarColors.bgElevatedDark,
+        color: context.varColors.bgElevated,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -33,20 +33,20 @@ class SynthesisSection extends StatelessWidget {
         children: [
           Text(
             '✦ Síntesis',
-            style: VarTypography.display(16, VarColors.accentPrimary),
+            style: VarTypography.display(16, context.varColors.accentPrimary),
           ),
           const SizedBox(height: VarSpacing.sm),
           Text(
             synthesis,
             // AAA contrast on the most important text to read
             // (docs/UX_DESIGN.md §1.5) — hence primary, not secondary.
-            style: VarTypography.body(16, VarColors.textPrimaryDark),
+            style: VarTypography.body(16, context.varColors.textPrimary),
           ),
           if (reflectiveQuestion != null) ...[
             const SizedBox(height: VarSpacing.lg),
             Text(
               reflectiveQuestion!,
-              style: VarTypography.display(20, VarColors.textPrimaryDark),
+              style: VarTypography.display(20, context.varColors.textPrimary),
             ),
           ],
         ],

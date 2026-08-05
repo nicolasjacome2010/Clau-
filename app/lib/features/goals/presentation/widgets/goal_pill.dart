@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../design_system/var_colors.dart';
+import '../../../../design_system/var_palette.dart';
 import '../../../../design_system/var_spacing.dart';
 import '../../../../design_system/var_typography.dart';
 
@@ -22,22 +22,25 @@ class GoalPill extends StatelessWidget {
       constraints: const BoxConstraints(minHeight: VarSpacing.minTouchTarget),
       padding: const EdgeInsets.only(left: VarSpacing.md, right: VarSpacing.xs),
       decoration: BoxDecoration(
-        color: VarColors.bgSurfaceDark,
+        color: context.varColors.bgSurface,
         borderRadius: BorderRadius.circular(VarSpacing.minTouchTarget / 2),
-        border: Border.all(color: VarColors.dividerDark),
+        border: Border.all(color: context.varColors.divider),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(name, style: VarTypography.body(14, VarColors.textPrimaryDark)),
+          Text(
+            name,
+            style: VarTypography.body(14, context.varColors.textPrimary),
+          ),
           Semantics(
             button: true,
             label: 'Quitar $name',
             child: IconButton(
-              icon: const Icon(
+              icon: Icon(
                 Icons.close,
                 size: 16,
-                color: VarColors.textSecondaryDark,
+                color: context.varColors.textSecondary,
               ),
               onPressed: onRemove,
               visualDensity: VisualDensity.compact,

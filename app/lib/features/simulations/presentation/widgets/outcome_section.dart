@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../design_system/var_colors.dart';
+import '../../../../design_system/var_palette.dart';
 import '../../../../design_system/var_spacing.dart';
 import '../../../../design_system/var_typography.dart';
 import '../../domain/decision_outcome.dart';
@@ -55,9 +55,9 @@ class _OutcomeSectionState extends ConsumerState<OutcomeSection> {
       width: double.infinity,
       padding: const EdgeInsets.all(VarSpacing.md),
       decoration: BoxDecoration(
-        color: VarColors.bgSurfaceDark,
+        color: context.varColors.bgSurface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: VarColors.dividerDark),
+        border: Border.all(color: context.varColors.divider),
       ),
       child: asyncState.when(
         data: (state) {
@@ -114,13 +114,13 @@ class _Prompt extends StatelessWidget {
       children: [
         Text(
           '¿Qué pasó realmente?',
-          style: VarTypography.display(20, VarColors.textPrimaryDark),
+          style: VarTypography.display(20, context.varColors.textPrimary),
         ),
         const SizedBox(height: VarSpacing.xs),
         Text(
           'Contarlo ajusta cómo el sistema te lee. Podés hacerlo cuando '
           'quieras — o no hacerlo.',
-          style: VarTypography.body(12, VarColors.textSecondaryDark),
+          style: VarTypography.body(12, context.varColors.textSecondary),
         ),
         const SizedBox(height: VarSpacing.md),
         TextField(
@@ -129,7 +129,7 @@ class _Prompt extends StatelessWidget {
           maxLines: 3,
           minLines: 2,
           textInputAction: TextInputAction.newline,
-          style: VarTypography.body(14, VarColors.textPrimaryDark),
+          style: VarTypography.body(14, context.varColors.textPrimary),
           decoration: const InputDecoration(
             hintText: 'Acepté la oferta y a los 3 meses…',
           ),
@@ -138,7 +138,7 @@ class _Prompt extends StatelessWidget {
           const SizedBox(height: VarSpacing.sm),
           Text(
             errorMessage!,
-            style: VarTypography.body(12, VarColors.signalLowDark),
+            style: VarTypography.body(12, context.varColors.signalLow),
           ),
         ],
         const SizedBox(height: VarSpacing.md),
@@ -153,7 +153,7 @@ class _Prompt extends StatelessWidget {
               const SizedBox(width: VarSpacing.sm),
               Text(
                 'Calibrando…',
-                style: VarTypography.body(12, VarColors.textSecondaryDark),
+                style: VarTypography.body(12, context.varColors.textSecondary),
               ),
             ],
           )
@@ -191,7 +191,7 @@ class _Confirmation extends StatelessWidget {
       children: [
         Text(
           'El sistema aprendió algo',
-          style: VarTypography.display(20, VarColors.textPrimaryDark),
+          style: VarTypography.display(20, context.varColors.textPrimary),
         ),
         const SizedBox(height: VarSpacing.md),
         CalibrationNeedle(delta: outcome.calibrationDelta),
@@ -204,12 +204,12 @@ class _Confirmation extends StatelessWidget {
             'Lo que pasó no se parece a ninguno de los escenarios que '
             'generamos. Eso es un punto ciego nuestro, y queda registrado '
             'como tal.',
-            style: VarTypography.body(14, VarColors.textPrimaryDark),
+            style: VarTypography.body(14, context.varColors.textPrimary),
           )
         else if (closest != null)
           Text(
             'Lo más parecido fue: $closest',
-            style: VarTypography.body(14, VarColors.textPrimaryDark),
+            style: VarTypography.body(14, context.varColors.textPrimary),
           ),
         if (outcome.systemErrorsIdentified.isNotEmpty) ...[
           const SizedBox(height: VarSpacing.md),
@@ -217,7 +217,7 @@ class _Confirmation extends StatelessWidget {
             'En qué se equivocó la simulación',
             style: VarTypography.body(
               12,
-              VarColors.textSecondaryDark,
+              context.varColors.textSecondary,
               weight: FontWeight.w600,
             ),
           ),
@@ -227,7 +227,7 @@ class _Confirmation extends StatelessWidget {
               padding: const EdgeInsets.only(bottom: 2),
               child: Text(
                 '· $error',
-                style: VarTypography.body(14, VarColors.textPrimaryDark),
+                style: VarTypography.body(14, context.varColors.textPrimary),
               ),
             ),
         ],

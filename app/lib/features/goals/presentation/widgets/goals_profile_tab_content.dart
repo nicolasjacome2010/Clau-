@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../design_system/var_colors.dart';
+import '../../../../design_system/var_palette.dart';
 import '../../../../design_system/var_spacing.dart';
 import '../../../../design_system/var_typography.dart';
 import '../../domain/goal.dart';
@@ -44,18 +44,18 @@ class _GoalsProfileTabContentState
         children: [
           Text(
             'Tus objetivos',
-            style: VarTypography.display(16, VarColors.textPrimaryDark),
+            style: VarTypography.display(16, context.varColors.textPrimary),
           ),
           const SizedBox(height: VarSpacing.xs),
           Text(
             'Son la vara con la que cada escenario se compara.',
-            style: VarTypography.body(12, VarColors.textSecondaryDark),
+            style: VarTypography.body(12, context.varColors.textSecondary),
           ),
           const SizedBox(height: VarSpacing.md),
           if (goals.isEmpty)
             Text(
               'Aún no tienes objetivos. Añade al menos uno para que las simulaciones tengan con qué compararse.',
-              style: VarTypography.body(14, VarColors.textSecondaryDark),
+              style: VarTypography.body(14, context.varColors.textSecondary),
             )
           else
             Wrap(
@@ -74,7 +74,7 @@ class _GoalsProfileTabContentState
           const SizedBox(height: VarSpacing.md),
           TextField(
             controller: _customGoalController,
-            style: VarTypography.body(16, VarColors.textPrimaryDark),
+            style: VarTypography.body(16, context.varColors.textPrimary),
             decoration: const InputDecoration(hintText: 'Otro objetivo…'),
             onSubmitted: (value) {
               controller.addGoal(value);
@@ -100,7 +100,7 @@ class _GoalsProfileTabContentState
           children: [
             Text(
               'No pudimos cargar tus objetivos.',
-              style: VarTypography.body(12, VarColors.signalLowDark),
+              style: VarTypography.body(12, context.varColors.signalLow),
             ),
             TextButton(
               onPressed: controller.refresh,
@@ -132,7 +132,7 @@ class _SuggestedGoals extends StatelessWidget {
       children: [
         Text(
           'Sugeridos',
-          style: VarTypography.body(14, VarColors.textSecondaryDark),
+          style: VarTypography.body(14, context.varColors.textSecondary),
         ),
         const SizedBox(height: VarSpacing.sm),
         Wrap(
@@ -210,12 +210,12 @@ class _AdvancedWeightsState extends State<_AdvancedWeights> {
                 child: Text(
                   goal.name,
                   overflow: TextOverflow.ellipsis,
-                  style: VarTypography.body(14, VarColors.textPrimaryDark),
+                  style: VarTypography.body(14, context.varColors.textPrimary),
                 ),
               ),
               Text(
                 '${value.round()}',
-                style: VarTypography.mono(14, VarColors.accentPrimary),
+                style: VarTypography.mono(14, context.varColors.accentPrimary),
               ),
             ],
           ),

@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/routing/app_routes.dart';
-import '../../../../design_system/var_colors.dart';
+import '../../../../design_system/var_palette.dart';
 import '../../../../design_system/var_motion.dart';
 import '../../../../design_system/var_spacing.dart';
 import '../../../shared/presentation/step_indicator.dart';
@@ -30,7 +30,7 @@ class OnboardingScreen extends ConsumerWidget {
     final controller = ref.read(onboardingControllerProvider.notifier);
 
     return Scaffold(
-      backgroundColor: VarColors.bgPrimaryDark,
+      backgroundColor: context.varColors.bgPrimary,
       body: SafeArea(
         child: Column(
           children: [

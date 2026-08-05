@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../design_system/var_colors.dart';
+import '../../../../design_system/var_palette.dart';
 import '../../../../design_system/var_motion.dart';
 import '../../../../design_system/var_spacing.dart';
 import '../../../../design_system/var_typography.dart';
@@ -58,15 +58,15 @@ class _GoalChipState extends State<GoalChip> {
             ),
             decoration: BoxDecoration(
               color: widget.selected
-                  ? VarColors.accentPrimary
-                  : VarColors.bgSurfaceDark,
+                  ? context.varColors.accentPrimary
+                  : context.varColors.bgSurface,
               borderRadius: BorderRadius.circular(
                 VarSpacing.minTouchTarget / 2,
               ),
               border: Border.all(
                 color: widget.selected
-                    ? VarColors.accentPrimary
-                    : VarColors.dividerDark,
+                    ? context.varColors.accentPrimary
+                    : context.varColors.divider,
               ),
             ),
             alignment: Alignment.center,
@@ -75,8 +75,8 @@ class _GoalChipState extends State<GoalChip> {
               style: VarTypography.body(
                 14,
                 widget.selected
-                    ? VarColors.bgPrimaryDark
-                    : VarColors.textPrimaryDark,
+                    ? context.varColors.bgPrimary
+                    : context.varColors.textPrimary,
                 weight: widget.selected ? FontWeight.w600 : FontWeight.w400,
               ),
             ),

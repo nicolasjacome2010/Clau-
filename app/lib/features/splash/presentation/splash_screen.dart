@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/routing/app_routes.dart';
-import '../../../design_system/var_colors.dart';
+import '../../../design_system/var_palette.dart';
 import '../../../design_system/var_typography.dart';
 
 /// Pantalla 1 — Splash (docs/UX_DESIGN.md §2): the wordmark plus a
@@ -48,7 +48,7 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: VarColors.bgPrimaryDark,
+      backgroundColor: context.varColors.bgPrimary,
       body: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -59,14 +59,17 @@ class _SplashScreenState extends State<SplashScreen>
               child: AnimatedBuilder(
                 animation: _controller,
                 builder: (context, _) => CustomPaint(
-                  painter: _BranchingLinePainter(progress: _controller.value),
+                  painter: _BranchingLinePainter(
+                    color: context.varColors.accentPrimary,
+                    progress: _controller.value,
+                  ),
                 ),
               ),
             ),
             const SizedBox(height: 24),
             Text(
               'VAR OS',
-              style: VarTypography.display(31, VarColors.textPrimaryDark),
+              style: VarTypography.display(31, context.varColors.textPrimary),
             ),
           ],
         ),
@@ -79,14 +82,18 @@ class _SplashScreenState extends State<SplashScreen>
 /// by a single 0..1 progress value so it stays a pure function of
 /// `AnimationController.value` (no imperative animation state).
 class _BranchingLinePainter extends CustomPainter {
-  _BranchingLinePainter({required this.progress});
+  _BranchingLinePainter({required this.progress, required this.color});
 
   final double progress;
+
+  /// Passed in rather than read from a context: a `CustomPainter` has no
+  /// `BuildContext`, and resolving the theme is the widget's job anyway.
+  final Color color;
 
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = VarColors.accentPrimary
+      ..color = color
       ..strokeWidth = 1.5
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
