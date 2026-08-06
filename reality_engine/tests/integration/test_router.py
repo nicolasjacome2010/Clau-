@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from fastapi.testclient import TestClient
 
 from reality_engine.main import create_app
@@ -172,3 +174,49 @@ def test_healthz_is_public() -> None:
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+def _lines(body: str) -> list[dict[str, object]]:
+    return [json.loads(line) for line in body.splitlines() if line.strip()]
+
+
+def test_simulate_stream_reports_stages_and_ends_with_a_result() -> None:
+    """Without OPENAI_API_KEY the run halts at Agent 0 — which is exactly
+    the shape a client must be able to read off the stream: the gate's two
+    edges, an explicit halt, then the result.
+    """
+    with TestClient(create_app()) as client:
+        response = client.post("/v1/simulate/stream", json={"raw_input": "algo neutral"})
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/x-ndjson")
+
+    events = _lines(response.text)
+    assert events[0] == {"type": "stage", "stage": "safety_gate", "status": "started"}
+    assert events[1] == {"type": "stage", "stage": "safety_gate", "status": "completed"}
+    assert events[2] == {"type": "halted"}
+    # The result still comes down the same stream: a halted run is a
+    # finished run, and the client renders a referral from it.
+    assert events[-1]["type"] == "result"
+    result = events[-1]["result"]
+    assert isinstance(result, dict)
+    assert result["scenarios"] is None
+
+
+def test_simulate_stream_is_valid_ndjson_line_by_line() -> None:
+    # One JSON document per line and nothing else — the contract a
+    # line-buffered client depends on.
+    with TestClient(create_app()) as client:
+        response = client.post(
+            "/v1/simulate/stream", json={"raw_input": "quiero quitarme la vida"}
+        )
+
+    for line in response.text.splitlines():
+        assert json.loads(line)["type"] in {"stage", "halted", "result", "error"}
+
+
+def test_simulate_stream_rejects_empty_input() -> None:
+    with TestClient(create_app()) as client:
+        response = client.post("/v1/simulate/stream", json={"raw_input": ""})
+
+    assert response.status_code == 422

@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import StreamingResponse
 
 from reality_engine.ai_gateway.domain.ports import LLMGenerationError
 from reality_engine.api.schemas import (
@@ -20,6 +21,7 @@ from reality_engine.api.schemas import (
     SafetyCheckRequest,
     SafetyCheckResponse,
 )
+from reality_engine.api.streaming import stream_simulation
 from reality_engine.pipeline.agents.learning import LearningAgent
 from reality_engine.pipeline.agents.safety_gate import SafetyGateAgent
 from reality_engine.pipeline.domain.schemas import (
@@ -82,6 +84,24 @@ async def simulate(
     pipeline: Annotated[SimulationPipeline, Depends(get_simulation_pipeline)],
 ) -> SimulationResult:
     return await pipeline.run(payload.raw_input, declared_goals=payload.declared_goals)
+
+
+@router.post("/simulate/stream")
+async def simulate_stream(
+    payload: AnalyzeRequest,
+    pipeline: Annotated[SimulationPipeline, Depends(get_simulation_pipeline)],
+) -> StreamingResponse:
+    """The same run as `/v1/simulate`, reporting each stage as it happens.
+
+    A separate endpoint rather than a flag on the existing one: the two
+    have different response *shapes* (one document vs. a sequence of
+    lines), and a single path that returns either depending on a parameter
+    is a path whose contract can't be written down.
+    """
+    return StreamingResponse(
+        stream_simulation(pipeline, payload.raw_input, payload.declared_goals),
+        media_type="application/x-ndjson",
+    )
 
 
 @router.post("/calibrate", response_model=CalibrateResponse)

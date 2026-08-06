@@ -61,7 +61,9 @@ reality_engine/  Reality Engine service — SEPARATE Python project/venv, not pa
                                              # _language_guards.py (shared deterministic/imperative-language checks)
     pipeline/orchestrator.py                 # AnalysisPipeline (0-6) and SimulationPipeline (0-11, Agent 11
                                               # memory-building never fails the simulation)
-    api/                                    # FastAPI router — /v1/safety-check, /v1/analyze, /v1/simulate, /v1/calibrate
+    api/                                    # FastAPI router — /v1/safety-check, /v1/analyze, /v1/simulate,
+                                             # /v1/simulate/stream (NDJSON progress), /v1/calibrate
+                                             # + streaming.py (runs the pipeline, yields one JSON line per event)
   tests/unit/, tests/integration/            # gateway retry/fallback (LLM + embeddings), mocked-OpenAI adapters,
                                               # each agent, both orchestrators, API
 app/             Flutter client — SEPARATE Dart/Flutter project, not part of backend/ or reality_engine/
@@ -185,6 +187,7 @@ CI (`.github/workflows/backend-ci.yml`, `reality-engine-ci.yml`, `app-ci.yml`) r
 - **Deterministic post-processing stays out of the model's hands too.** `GoalsExtractionAgent` and `ScenarioGenerationAgent` normalize weights/probabilities to sum to 100 in plain code after the LLM call, never by re-prompting — same principle as Agent 9 (`RankingAgent`), which is a pure function over Agent 8's output and takes no `AIGateway` at all.
 - **A model's own words are never silently rewritten.** `pipeline/agents/_language_guards.py` checks Agent 7/10 output for deterministic-future or imperative language (docs/PRD.md §2, "nunca afirmar certeza" / "el usuario decide"). On a hit, the agent retries the LLM call (up to `max_language_retries`); if the violation persists, it raises `LLMGenerationError` rather than serve or silently edit non-compliant text. Apply this pattern, not string-patching, to any future agent with a linguistic constraint.
 - **Each agent is one class with one `run()` method**, constructor-injected with `AIGateway` (except `RankingAgent`, which needs none). The orchestrator (`pipeline/orchestrator.py`: `AnalysisPipeline` for 0-6, `SimulationPipeline` wrapping it and adding 7-10) is the only place that sequences agents and owns the short-circuit-on-unsafe branch. Don't let an agent call another agent directly.
+- **Progress reporting is an optional listener, never a second code path.** `AnalysisPipeline`/`SimulationPipeline.run` take an `on_stage` callback and emit `started`/`completed` around each agent; an unwatched run behaves exactly as before, which is what keeps `/v1/simulate` unchanged. Stage ids are per **agent**, not per UI row — collapsing twelve agents into Pantalla 6's six labels would bake display copy into the engine, so the client groups and labels them. A Safety Gate halt is its own event rather than a stage status (the run ends there and the client must render a referral), and a failure is announced in-band as an `error` line, because by then the 200 has already gone out and a truncated body is indistinguishable from a dropped connection.
 - **Real provider adapters are tested against a mocked client, not the network.** `test_openai_provider.py` verifies prompt construction, JSON parsing, and error mapping with `unittest.mock.AsyncMock` — there is no `OPENAI_API_KEY` in CI or in this environment. `FakeLLMProvider` (canned responses/errors, in order) is for testing gateway and agent logic; it is never imported outside `tests/`.
 
 ### Flutter client (`app/`) — established by the design system + `splash`/`onboarding`/`auth`

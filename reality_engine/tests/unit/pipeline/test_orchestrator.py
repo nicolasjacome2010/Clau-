@@ -6,6 +6,12 @@ from reality_engine.ai_gateway.application.gateway import AIGateway
 from reality_engine.ai_gateway.domain.ports import ModelTier
 from reality_engine.ai_gateway.infrastructure.fake_embedding_provider import FakeEmbeddingProvider
 from reality_engine.ai_gateway.infrastructure.fake_provider import FakeLLMProvider
+from reality_engine.pipeline.domain.events import (
+    HaltedEvent,
+    PipelineEvent,
+    PipelineStage,
+    StageEvent,
+)
 from reality_engine.pipeline.domain.schemas import (
     ComparisonOutput,
     ComprehensionOutput,
@@ -266,3 +272,100 @@ async def test_simulation_pipeline_short_circuits_when_unsafe() -> None:
     assert result.synthesis is None
     assert result.memory is None
     assert reasoning_provider.calls == []
+
+
+@pytest.mark.asyncio
+async def test_pipeline_reports_every_stage_in_order() -> None:
+    embedding_provider = FakeEmbeddingProvider(responses=[[0.1, 0.2, 0.3]])
+    gateway, *_ = _full_safe_gateway(embedding_provider=embedding_provider)
+    pipeline = SimulationPipeline(gateway)
+    events: list[PipelineEvent] = []
+
+    async def listen(event: PipelineEvent) -> None:
+        events.append(event)
+
+    await pipeline.run("¿Debo aceptar?", declared_goals=["Estabilidad"], on_stage=listen)
+
+    stages = [e.stage for e in events if isinstance(e, StageEvent)]
+    assert stages == [
+        stage
+        for stage in (
+            PipelineStage.SAFETY_GATE,
+            PipelineStage.COMPREHENSION,
+            PipelineStage.SUMMARY,
+            PipelineStage.GOALS_EXTRACTION,
+            PipelineStage.EMOTIONS,
+            PipelineStage.PSYCHOLOGY,
+            PipelineStage.RISK_ANALYSIS,
+            PipelineStage.SCENARIO_GENERATION,
+            PipelineStage.COMPARISON,
+            PipelineStage.RANKING,
+            PipelineStage.SYNTHESIS,
+            PipelineStage.MEMORY,
+        )
+        for _ in range(2)  # started, then completed
+    ]
+    # Every stage is bracketed: a client needs the "started" edge to have
+    # anything to show as in progress.
+    assert [e.status for e in events if isinstance(e, StageEvent)] == [
+        "started" if index % 2 == 0 else "completed" for index in range(24)
+    ]
+
+
+@pytest.mark.asyncio
+async def test_an_unwatched_run_behaves_identically() -> None:
+    """The listener is optional, and the pipeline must not depend on it."""
+    embedding_provider = FakeEmbeddingProvider(responses=[[0.1, 0.2, 0.3]])
+    gateway, *_ = _full_safe_gateway(embedding_provider=embedding_provider)
+
+    result = await SimulationPipeline(gateway).run("¿Debo aceptar?", declared_goals=[])
+
+    assert result.synthesis is not None
+
+
+@pytest.mark.asyncio
+async def test_a_halt_is_reported_as_its_own_event() -> None:
+    # Not as "one more completed stage": the run ends here, and a listener
+    # that missed that would wait forever for scenarios.
+    safety_provider = FakeLLMProvider(
+        responses=[
+            SafetyGateOutput(
+                risk_level=RiskLevel.ACUTE_RISK,
+                signals_detected=["pattern"],
+                safe_to_proceed=False,
+                recommended_action=RecommendedAction.HALT_AND_REFER,
+            )
+        ]
+    )
+    gateway = AIGateway({ModelTier.SAFETY_CLASSIFICATION: [safety_provider]})
+    events: list[PipelineEvent] = []
+
+    async def listen(event: PipelineEvent) -> None:
+        events.append(event)
+
+    await SimulationPipeline(gateway).run("...", on_stage=listen)
+
+    assert isinstance(events[-1], HaltedEvent)
+    assert [e.stage for e in events if isinstance(e, StageEvent)] == [
+        PipelineStage.SAFETY_GATE,
+        PipelineStage.SAFETY_GATE,
+    ]
+
+
+@pytest.mark.asyncio
+async def test_memory_failure_still_completes_its_stage() -> None:
+    # Memory is an enhancement; surfacing its failure as an unfinished
+    # stage would make a successful simulation look broken.
+    gateway, *_ = _full_safe_gateway(embedding_provider=None)
+    events: list[PipelineEvent] = []
+
+    async def listen(event: PipelineEvent) -> None:
+        events.append(event)
+
+    result = await SimulationPipeline(gateway).run("¿Y?", on_stage=listen)
+
+    assert result.memory is None
+    memory_events = [
+        e for e in events if isinstance(e, StageEvent) and e.stage is PipelineStage.MEMORY
+    ]
+    assert [e.status for e in memory_events] == ["started", "completed"]

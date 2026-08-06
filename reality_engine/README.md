@@ -2,7 +2,7 @@
 
 Servicio independiente del Core API (`docs/ARCHITECTURE.md §2.2`): su perfil de carga (IO-bound esperando respuestas de IA, alta latencia, necesidad de colas) es fundamentalmente distinto al del resto del backend CRUD.
 
-**Estado actual: los 13 agentes de docs/REALITY_ENGINE.md están implementados.** `AnalysisPipeline` encadena 0-6 (`POST /v1/analyze`); `SimulationPipeline` la extiende con 7-11 (`POST /v1/simulate`) hasta producir escenarios rankeados, una síntesis, y — si hay proveedor de embeddings configurado — un resumen listo para memoria semántica. El Agente 12 (Aprendizaje) vive fuera de ambos pipelines, en su propio endpoint (`POST /v1/calibrate`), porque solo corre cuando un usuario reporta qué pasó realmente con una decisión pasada, no en cada simulación. Este servicio sigue sin conocer `user_id`/`decision_id` ni llamar a Core API directamente — persistir en `memory` es responsabilidad de `simulations`' `RunSimulationUseCase` en `backend/`, que ya consume esta respuesta. Tampoco hay orquestador de grafo con paralelización real, workers async, ni streaming de progreso por WebSocket (todo eso descrito en `docs/ARCHITECTURE.md §2.2`) — la ejecución es secuencial.
+**Estado actual: los 13 agentes de docs/REALITY_ENGINE.md están implementados.** `AnalysisPipeline` encadena 0-6 (`POST /v1/analyze`); `SimulationPipeline` la extiende con 7-11 (`POST /v1/simulate`) hasta producir escenarios rankeados, una síntesis, y — si hay proveedor de embeddings configurado — un resumen listo para memoria semántica. El Agente 12 (Aprendizaje) vive fuera de ambos pipelines, en su propio endpoint (`POST /v1/calibrate`), porque solo corre cuando un usuario reporta qué pasó realmente con una decisión pasada, no en cada simulación. Este servicio sigue sin conocer `user_id`/`decision_id` ni llamar a Core API directamente — persistir en `memory` es responsabilidad de `simulations`' `RunSimulationUseCase` en `backend/`, que ya consume esta respuesta. **`POST /v1/simulate/stream` reporta cada etapa mientras corre** (NDJSON, un evento JSON por línea), que es lo que la Pantalla 6 necesita; `/v1/simulate` queda intacto para quien no le interese el progreso. No hay todavía orquestador de grafo con paralelización real ni workers async (`docs/ARCHITECTURE.md §2.2`) — la ejecución sigue siendo secuencial, y la corrida vive y muere con la petición.
 
 ## Por qué el Agente 0 primero
 
@@ -37,7 +37,8 @@ src/reality_engine/
       learning.py                         # Agente 12: calibración on-demand, fuera de los pipelines
       _language_guards.py               # detectores compartidos de lenguaje determinista/imperativo
     orchestrator.py             # AnalysisPipeline (0-6) y SimulationPipeline (0-11)
-  api/                        # router FastAPI (/v1/safety-check, /v1/analyze, /v1/simulate, /v1/calibrate)
+  api/                        # router FastAPI (/v1/safety-check, /v1/analyze, /v1/simulate,
+                               # /v1/simulate/stream, /v1/calibrate) + streaming.py (NDJSON)
 tests/
   unit/ai_gateway/            # retry/fallback (LLM y embeddings) + adaptadores OpenAI mockeados
   unit/pipeline/               # cada agente aislado + ambos orquestadores
@@ -81,3 +82,24 @@ pytest -v
 ```
 
 Los tests corren sin `OPENAI_API_KEY` real: `FakeLLMProvider` cubre el pipeline y `test_openai_provider.py` verifica el adaptador contra un cliente `AsyncOpenAI` mockeado (prompt, parseo de JSON, mapeo de errores) — nunca contra la red.
+
+## Streaming de progreso (`POST /v1/simulate/stream`)
+
+Misma corrida que `/v1/simulate`, pero reportando cada etapa a medida que ocurre: una línea JSON por evento (`application/x-ndjson`), y la última línea es el resultado completo.
+
+```
+{"type":"stage","stage":"safety_gate","status":"started"}
+{"type":"stage","stage":"safety_gate","status":"completed"}
+{"type":"stage","stage":"comprehension","status":"started"}
+...
+{"type":"result","result":{...}}
+```
+
+Decisiones que vale la pena conocer antes de tocarlo:
+
+- **Los ids de etapa son por agente, no por fila de la UI.** Lo que corre es un agente; colapsar doce en las seis etiquetas que muestra la Pantalla 6 metería copy de interfaz dentro del motor. El cliente agrupa y etiqueta (`docs/UX_DESIGN.md` es dueño de esas palabras), y un agente nuevo aparece como un id nuevo en vez de desaparecer en el balde de otro.
+- **Se emiten los dos bordes, `started` y `completed`.** Un cliente que solo escuchara etapas terminadas no tendría nada que mostrar como "en curso", que es justamente el punto de esa pantalla.
+- **Un `halt` del Agente 0 es su propio evento**, no una etapa más: la corrida termina ahí y el cliente debe renderizar una derivación, no seguir esperando escenarios.
+- **Un fallo se dice en banda** (`{"type":"error"}`) antes de cerrar el cuerpo. Para cuando falla, el 200 ya salió — es inherente al streaming — y un cuerpo truncado sería indistinguible de una conexión caída.
+- **Es un endpoint aparte, no un flag sobre `/v1/simulate`.** Las dos formas de respuesta son distintas (un documento vs. una secuencia de líneas), y una ruta que devuelve cualquiera de las dos según un parámetro es una ruta cuyo contrato no se puede escribir.
+- **NDJSON, no SSE ni WebSocket.** El único consumidor es Core API retransmitiendo al cliente Flutter, y el framing de SSE compraría semántica de reconexión que acá no significa nada: el trabajo no es reanudable, así que un cliente que reconecta no tiene a qué reconectarse. Esa es también la razón honesta de que sea un stream sobre una petición y no un WebSocket — la corrida vive y muere con la petición de todos modos, y fingir lo contrario necesita una cola y un worker, no otro socket.
