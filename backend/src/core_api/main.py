@@ -18,6 +18,7 @@ from core_api.decisions.api.router import router as decisions_router
 from core_api.goals.api.router import router as goals_router
 from core_api.identity.api.router import router as identity_router
 from core_api.memory.api.router import router as memory_router
+from core_api.privacy.api.router import router as privacy_router
 from core_api.simulations.api.router import router as simulations_router
 from core_api.simulations.infrastructure.reality_engine_client import HttpRealityEngineClient
 
@@ -63,6 +64,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(simulations_router)
     app.include_router(memory_router)
     app.include_router(billing_router)
+    app.include_router(privacy_router)
 
     @app.get("/healthz", tags=["ops"])
     async def healthz() -> dict[str, str]:

@@ -27,6 +27,11 @@ async def sqlite_session() -> AsyncIterator[AsyncSession]:
     """
     engine = create_engine("sqlite+aiosqlite:///:memory:")
     async with engine.begin() as conn:
+        # SQLite ignores foreign keys unless asked, and this schema leans on
+        # `ON DELETE CASCADE` from `users.id` for erasure (docs/DATABASE.md).
+        # Without the pragma the tests would happily "pass" while the
+        # cascade they claim to verify never ran.
+        await conn.exec_driver_sql("PRAGMA foreign_keys=ON")
         await conn.run_sync(Base.metadata.create_all)
 
     session_factory = create_session_factory(engine)

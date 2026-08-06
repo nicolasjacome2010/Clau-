@@ -68,6 +68,14 @@ class SqlAlchemyUserRepository(UserRepository):
         await self._session.flush()
         return _to_entity(model)
 
+    async def delete(self, user_id: UUID) -> bool:
+        model = await self._session.get(UserModel, user_id)
+        if model is None:
+            return False
+        await self._session.delete(model)
+        await self._session.flush()
+        return True
+
 
 class SqlAlchemyUserProfileRepository(UserProfileRepository):
     def __init__(self, session: AsyncSession) -> None:

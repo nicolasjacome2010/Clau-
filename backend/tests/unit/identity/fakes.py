@@ -30,6 +30,12 @@ class InMemoryUserRepository(UserRepository):
         self._users[user.id] = user
         return user
 
+    async def delete(self, user_id: UUID) -> bool:
+        # No cascade to imitate: these fakes hold one context each, and the
+        # cross-table erasure is the database's job (see the repository
+        # interface). An integration test is what proves that part.
+        return self._users.pop(user_id, None) is not None
+
 
 class InMemoryUserProfileRepository(UserProfileRepository):
     def __init__(self) -> None:
