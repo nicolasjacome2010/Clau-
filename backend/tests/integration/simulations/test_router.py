@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Iterator
 from uuid import uuid4
 
@@ -22,6 +23,7 @@ from core_api.simulations.domain.reality_engine_port import (
     RealityEngineCalibrationOutcome,
     RealityEngineScenario,
     RealityEngineSimulationOutcome,
+    RealityEngineStageEvent,
 )
 from tests.unit.decisions.fakes import InMemoryDecisionRepository
 from tests.unit.goals.fakes import InMemoryGoalRepository
@@ -73,6 +75,10 @@ def reality_engine() -> FakeRealityEngineClient:
                 system_errors_identified=["overconfidence"],
                 user_bias_profile_update={"optimism_bias": 0.7},
             )
+        ],
+        stream_events=[
+            RealityEngineStageEvent(stage="safety_gate", status="started"),
+            RealityEngineStageEvent(stage="safety_gate", status="completed"),
         ],
     )
 
@@ -141,6 +147,79 @@ def test_run_simulation_on_another_users_decision_returns_404(client: TestClient
     )
 
     assert response.status_code == 404
+
+
+def _ndjson_lines(body: str) -> list[dict[str, object]]:
+    return [json.loads(line) for line in body.splitlines() if line.strip()]
+
+
+def test_run_simulation_stream_reports_stages_and_ends_with_a_result(client: TestClient) -> None:
+    decision_id = _create_decision(client)
+
+    response = client.post(f"/v1/decisions/{decision_id}/simulations/stream", headers=AUTH)
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/x-ndjson")
+
+    events = _ndjson_lines(response.text)
+    assert events[0] == {"type": "stage", "stage": "safety_gate", "status": "started"}
+    assert events[1] == {"type": "stage", "stage": "safety_gate", "status": "completed"}
+    assert events[-1]["type"] == "result"
+    result = events[-1]["result"]
+    assert isinstance(result, dict)
+    assert result["status"] == "completed"
+    assert len(result["scenarios"]) == 1
+
+    decision_after = client.get(f"/v1/decisions/{decision_id}", headers=AUTH).json()
+    assert decision_after["status"] == "completed"
+
+
+def test_run_simulation_stream_is_valid_ndjson_line_by_line(client: TestClient) -> None:
+    decision_id = _create_decision(client)
+
+    response = client.post(f"/v1/decisions/{decision_id}/simulations/stream", headers=AUTH)
+
+    for line in response.text.splitlines():
+        assert json.loads(line)["type"] in {"stage", "result", "error"}
+
+
+def test_run_simulation_stream_on_nonexistent_decision_returns_404(client: TestClient) -> None:
+    response = client.post(f"/v1/decisions/{uuid4()}/simulations/stream", headers=AUTH)
+
+    assert response.status_code == 404
+
+
+def test_run_simulation_stream_on_another_users_decision_returns_404(client: TestClient) -> None:
+    decision_id = _create_decision(client)
+
+    response = client.post(
+        f"/v1/decisions/{decision_id}/simulations/stream",
+        headers={"Authorization": "Bearer other-token"},
+    )
+
+    assert response.status_code == 404
+
+
+def test_run_simulation_stream_reports_a_mid_stream_failure_in_band(client: TestClient) -> None:
+    decision_id = _create_decision(client)
+    # The fixture's `reality_engine` only has 3 canned `responses`; two other
+    # tests in this module don't touch it, but this one drains it on its own
+    # by using a client with none at all, so the stream fails only *after*
+    # its 200 has already gone out — exactly the case `_stream_lines`'
+    # broad `except Exception` exists for.
+    client.app.dependency_overrides[get_reality_engine_client] = lambda: FakeRealityEngineClient(
+        stream_events=[RealityEngineStageEvent(stage="safety_gate", status="started")]
+    )
+
+    response = client.post(f"/v1/decisions/{decision_id}/simulations/stream", headers=AUTH)
+
+    assert response.status_code == 200
+    events = _ndjson_lines(response.text)
+    assert events[0] == {"type": "stage", "stage": "safety_gate", "status": "started"}
+    assert events[-1]["type"] == "result"
+    result = events[-1]["result"]
+    assert isinstance(result, dict)
+    assert result["status"] == "failed"
 
 
 def test_list_simulations_for_decision(client: TestClient) -> None:

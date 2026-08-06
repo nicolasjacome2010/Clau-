@@ -15,6 +15,21 @@ from typing import Any
 from uuid import UUID
 
 
+@dataclass(frozen=True, slots=True)
+class SimulationStageEvent:
+    """One Reality Engine agent starting or finishing, relayed as-is.
+
+    This module's own type, not a re-export of
+    `reality_engine_port.RealityEngineStageEvent`: `simulations` never
+    leaks another bounded context's shape across its own boundary (same
+    rule the rest of this port follows), even when the fields happen to
+    match today.
+    """
+
+    stage: str
+    status: str
+
+
 class SimulationStatus(StrEnum):
     """A subset of docs/DATABASE.md §2.5's status enum: `queued`/`running`
     aren't reachable yet because this module calls the Reality Engine

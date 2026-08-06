@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -34,6 +34,37 @@ class SimulationResponse(BaseModel):
     reflective_question: str | None
     started_at: datetime
     completed_at: datetime | None
+
+
+class SimulationStreamStageResponse(BaseModel):
+    """One NDJSON line of `POST /decisions/{id}/simulations/stream` while
+    the run is in progress — a direct relay of `SimulationStageEvent`.
+    """
+
+    type: Literal["stage"] = "stage"
+    stage: str
+    status: str
+
+
+class SimulationStreamResultResponse(BaseModel):
+    """The stream's last line: the same body `run_simulation` returns
+    synchronously, wrapped so the client can tell it apart from a stage
+    line without inspecting its shape.
+    """
+
+    type: Literal["result"] = "result"
+    result: SimulationResponse
+
+
+class SimulationStreamErrorResponse(BaseModel):
+    """Emitted only if the run fails *after* the stream's 200 has already
+    gone out — by then an HTTP error status is no longer possible, so the
+    failure has to be said in-band instead of leaving a body that ends
+    early and reads exactly like a dropped connection.
+    """
+
+    type: Literal["error"] = "error"
+    message: str
 
 
 class ReportDecisionOutcomeRequest(BaseModel):

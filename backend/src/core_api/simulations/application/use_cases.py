@@ -5,7 +5,11 @@ bounded contexts together: it reads a `Decision` (decisions), reads the
 user's active `Goal`s (goals) to pass as context, calls the Reality Engine
 (via the `RealityEngineClient` port), persists the result as a
 `Simulation`, and — when Reality Engine's Agent 11 (Memoria) produced one —
-persists the run's semantic memory (memory).
+persists the run's semantic memory (memory). `RunSimulationStreamUseCase`
+is the same operation reporting progress as it happens (docs/UX_DESIGN.md
+Pantalla 6): it shares every step with the unary use case through
+`_persist_outcome`, so there are not two definitions of what a completed
+simulation is — only two ways of finding out about one.
 
 `ReportDecisionOutcomeUseCase` closes the loop (docs/PRD.md CU8): it sends
 a past Simulation's scenarios back to Reality Engine's Agent 12
@@ -15,6 +19,7 @@ resulting `DecisionOutcome` and its effect on the user's `UserBiasProfile`.
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
@@ -30,6 +35,7 @@ from core_api.simulations.domain.entities import (
     DecisionOutcome,
     Simulation,
     SimulationScenario,
+    SimulationStageEvent,
     SimulationStatus,
 )
 from core_api.simulations.domain.exceptions import (
@@ -42,6 +48,8 @@ from core_api.simulations.domain.reality_engine_port import (
     RealityEngineClient,
     RealityEngineError,
     RealityEngineRankedScenario,
+    RealityEngineSimulationOutcome,
+    RealityEngineStageEvent,
 )
 from core_api.simulations.domain.repositories import DecisionOutcomeRepository, SimulationRepository
 
@@ -54,7 +62,15 @@ class RunSimulationInput:
     requesting_user_id: UUID
 
 
-class RunSimulationUseCase:
+class _SimulationRunner:
+    """Everything `RunSimulationUseCase` and `RunSimulationStreamUseCase`
+    share: looking up the owned decision, advancing its status, and turning
+    whatever Reality Engine returned into a persisted `Simulation` (plus,
+    when present, a stored memory). Only *how they learn about progress*
+    differs between the two — the definition of a completed simulation
+    does not, and living in one place is what guarantees that.
+    """
+
     def __init__(
         self,
         decision_repository: DecisionRepository,
@@ -69,17 +85,24 @@ class RunSimulationUseCase:
         self._reality_engine = reality_engine_client
         self._memories = memory_repository
 
-    async def execute(self, data: RunSimulationInput) -> Simulation:
-        decision = await self._get_owned_decision(data.decision_id, data.requesting_user_id)
-        decision = await self._advance_to_simulating(decision)
+    async def _get_owned_decision(self, decision_id: UUID, user_id: UUID) -> Decision:
+        decision = await self._decisions.get_by_id(decision_id)
+        if decision is None or decision.user_id != user_id:
+            raise DecisionNotFoundError(decision_id)
+        return decision
 
-        active_goals = await self._goals.list_for_user(data.requesting_user_id, active_only=True)
-        declared_goal_names = [goal.name for goal in active_goals]
-
-        started_at = datetime.now(UTC)
-        try:
-            outcome = await self._reality_engine.simulate(decision.raw_input, declared_goal_names)
-        except RealityEngineError:
+    async def _persist_outcome(
+        self,
+        decision: Decision,
+        user_id: UUID,
+        started_at: datetime,
+        outcome: RealityEngineSimulationOutcome | None,
+    ) -> Simulation:
+        """`outcome` is `None` when the Reality Engine call itself failed
+        (`RealityEngineError`) — a terminal `FAILED` row either way, same
+        as a run that reached the engine but came back unsafe.
+        """
+        if outcome is None:
             return await self._simulations.create(
                 Simulation(
                     id=uuid4(),
@@ -156,7 +179,7 @@ class RunSimulationUseCase:
             # as owned above), so no defensive try/except is added.
             await StoreMemoryUseCase(self._memories, self._decisions).execute(
                 StoreMemoryInput(
-                    user_id=data.requesting_user_id,
+                    user_id=user_id,
                     summary_text=outcome.memory_summary,
                     embedding=outcome.memory_embedding,
                     decision_id=decision.id,
@@ -167,12 +190,6 @@ class RunSimulationUseCase:
         await self._decisions.update(completed_decision)
 
         return simulation
-
-    async def _get_owned_decision(self, decision_id: UUID, user_id: UUID) -> Decision:
-        decision = await self._decisions.get_by_id(decision_id)
-        if decision is None or decision.user_id != user_id:
-            raise DecisionNotFoundError(decision_id)
-        return decision
 
     async def _advance_to_simulating(self, decision: Decision) -> Decision:
         # `draft` needs an intermediate hop through `clarifying` (the
@@ -187,9 +204,63 @@ class RunSimulationUseCase:
             decision = await self._decisions.update(
                 decision.with_status(DecisionStatus.CLARIFYING, at=now)
             )
-        return await self._decisions.update(
-            decision.with_status(DecisionStatus.SIMULATING, at=now)
+        return await self._decisions.update(decision.with_status(DecisionStatus.SIMULATING, at=now))
+
+    async def _declared_goal_names(self, user_id: UUID) -> list[str]:
+        active_goals = await self._goals.list_for_user(user_id, active_only=True)
+        return [goal.name for goal in active_goals]
+
+
+class RunSimulationUseCase(_SimulationRunner):
+    async def execute(self, data: RunSimulationInput) -> Simulation:
+        decision = await self._get_owned_decision(data.decision_id, data.requesting_user_id)
+        decision = await self._advance_to_simulating(decision)
+        declared_goal_names = await self._declared_goal_names(data.requesting_user_id)
+
+        started_at = datetime.now(UTC)
+        outcome: RealityEngineSimulationOutcome | None
+        try:
+            outcome = await self._reality_engine.simulate(decision.raw_input, declared_goal_names)
+        except RealityEngineError:
+            outcome = None
+
+        return await self._persist_outcome(
+            decision, data.requesting_user_id, started_at, outcome
         )
+
+
+class RunSimulationStreamUseCase(_SimulationRunner):
+    """Same operation as `RunSimulationUseCase`, reporting each Reality
+    Engine stage as it arrives (docs/UX_DESIGN.md Pantalla 6) and yielding
+    the persisted `Simulation` last.
+
+    An async generator rather than a callback: the API layer's job here is
+    to turn this into an HTTP stream, and a generator is what
+    `StreamingResponse`-shaped code wants — nothing upstream of this use
+    case needs to know Reality Engine's event shape at all.
+    """
+
+    async def execute(
+        self, data: RunSimulationInput
+    ) -> AsyncIterator[SimulationStageEvent | Simulation]:
+        decision = await self._get_owned_decision(data.decision_id, data.requesting_user_id)
+        decision = await self._advance_to_simulating(decision)
+        declared_goal_names = await self._declared_goal_names(data.requesting_user_id)
+
+        started_at = datetime.now(UTC)
+        outcome: RealityEngineSimulationOutcome | None = None
+        try:
+            async for event in self._reality_engine.simulate_stream(
+                decision.raw_input, declared_goal_names
+            ):
+                if isinstance(event, RealityEngineStageEvent):
+                    yield SimulationStageEvent(stage=event.stage, status=event.status)
+                else:
+                    outcome = event
+        except RealityEngineError:
+            outcome = None
+
+        yield await self._persist_outcome(decision, data.requesting_user_id, started_at, outcome)
 
 
 class ListSimulationsForDecisionUseCase:

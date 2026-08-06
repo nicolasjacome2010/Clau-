@@ -10,6 +10,8 @@ so it lives here, not in the use case.
 
 from __future__ import annotations
 
+import json
+from collections.abc import AsyncIterator
 from typing import Any
 
 import httpx
@@ -23,6 +25,7 @@ from core_api.simulations.domain.reality_engine_port import (
     RealityEngineRankedScenario,
     RealityEngineScenario,
     RealityEngineSimulationOutcome,
+    RealityEngineStageEvent,
 )
 
 
@@ -98,6 +101,11 @@ class _CalibrateResponse(BaseModel):
 
 
 class HttpRealityEngineClient(RealityEngineClient):
+    #: Longer than the unary timeout: a streamed run reports progress
+    #: throughout, so a slow pipeline is visibly alive rather than
+    #: indistinguishable from a hang — the reason to wait longer at all.
+    _stream_timeout = 120.0
+
     def __init__(self, base_url: str, *, http_client: httpx.AsyncClient | None = None) -> None:
         self._base_url = base_url.rstrip("/")
         self._http_client = http_client or httpx.AsyncClient(timeout=45.0)
@@ -115,6 +123,54 @@ class HttpRealityEngineClient(RealityEngineClient):
         except (httpx.HTTPError, ValueError) as exc:
             raise RealityEngineError(f"Reality Engine request failed: {exc}") from exc
 
+        return self._to_outcome(parsed)
+
+    async def simulate_stream(
+        self, raw_input: str, declared_goals: list[str]
+    ) -> AsyncIterator[RealityEngineStageEvent | RealityEngineSimulationOutcome]:
+        """Relays `/v1/simulate/stream`, one NDJSON line at a time.
+
+        A line that doesn't parse, or an `error` line from the engine,
+        raises rather than ending the iteration quietly: a consumer that
+        just saw the stream stop has no way to tell a finished run from a
+        broken one, and would persist neither.
+        """
+        parsed: _SimulateResponse | None = None
+        try:
+            async with self._http_client.stream(
+                "POST",
+                f"{self._base_url}/v1/simulate/stream",
+                json={"raw_input": raw_input, "declared_goals": declared_goals},
+                timeout=self._stream_timeout,
+            ) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if not line.strip():
+                        continue
+                    event = json.loads(line)
+                    kind = event.get("type")
+                    if kind == "stage":
+                        yield RealityEngineStageEvent(
+                            stage=str(event.get("stage", "")),
+                            status=str(event.get("status", "")),
+                        )
+                    elif kind == "error":
+                        raise RealityEngineError(
+                            f"Reality Engine reported a failure: {event.get('message')}"
+                        )
+                    elif kind == "result":
+                        parsed = _SimulateResponse.model_validate(event["result"])
+                    # An unknown event type is skipped on purpose: the
+                    # engine is free to add vocabulary without this relay
+                    # having to be redeployed first.
+        except (httpx.HTTPError, ValueError, KeyError) as exc:
+            raise RealityEngineError(f"Reality Engine stream failed: {exc}") from exc
+
+        if parsed is None:
+            raise RealityEngineError("Reality Engine stream ended without a result")
+        yield self._to_outcome(parsed)
+
+    def _to_outcome(self, parsed: _SimulateResponse) -> RealityEngineSimulationOutcome:
         safety = parsed.analysis.safety
         safety_gate_result = safety.model_dump()
 

@@ -4,7 +4,7 @@ by unit tests.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Sequence
 from uuid import UUID
 
 from core_api.simulations.domain.entities import DecisionOutcome, Simulation
@@ -15,6 +15,7 @@ from core_api.simulations.domain.reality_engine_port import (
     RealityEngineError,
     RealityEngineRankedScenario,
     RealityEngineSimulationOutcome,
+    RealityEngineStageEvent,
 )
 from core_api.simulations.domain.repositories import DecisionOutcomeRepository, SimulationRepository
 
@@ -62,10 +63,16 @@ class FakeRealityEngineClient(RealityEngineClient):
         responses: list[RealityEngineSimulationOutcome | RealityEngineError] | None = None,
         calibrate_responses: list[RealityEngineCalibrationOutcome | RealityEngineError]
         | None = None,
+        stream_events: list[RealityEngineStageEvent] | None = None,
     ) -> None:
         self._responses = list(responses or [])
         self._calibrate_responses = list(calibrate_responses or [])
+        # Canned progress events for `simulate_stream` — shared across every
+        # call, since tests care about "does the caller relay these", not
+        # about varying them run to run.
+        self._stream_events = list(stream_events or [])
         self.calls: list[tuple[str, list[str]]] = []
+        self.stream_calls: list[tuple[str, list[str]]] = []
         self.calibrate_calls: list[
             tuple[str, list[RealityEngineCalibrationScenario], list[RealityEngineRankedScenario]]
         ] = []
@@ -80,6 +87,19 @@ class FakeRealityEngineClient(RealityEngineClient):
         if isinstance(result, RealityEngineError):
             raise result
         return result
+
+    async def simulate_stream(
+        self, raw_input: str, declared_goals: list[str]
+    ) -> AsyncIterator[RealityEngineStageEvent | RealityEngineSimulationOutcome]:
+        self.stream_calls.append((raw_input, declared_goals))
+        for event in self._stream_events:
+            yield event
+        if not self._responses:
+            raise RealityEngineError("FakeRealityEngineClient has no more canned responses")
+        result = self._responses.pop(0)
+        if isinstance(result, RealityEngineError):
+            raise result
+        yield result
 
     async def calibrate(
         self,

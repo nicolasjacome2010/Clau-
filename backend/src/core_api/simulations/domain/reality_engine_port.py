@@ -12,12 +12,15 @@ Synchronous, not queued: `docs/ARCHITECTURE.md §2.2` describes dispatching
 simulation requests via a queue so an HTTP request never blocks on a
 15-30s pipeline run. This port is called directly and synchronously for
 now — the queue-based dispatch is deferred, not built speculatively ahead
-of a second caller that would need it.
+of a second caller that would need it. `simulate_stream` doesn't change
+that: it reports progress *during* the same blocking run, so the work
+still lives and dies with the request.
 """
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -50,6 +53,25 @@ class RealityEngineSimulationOutcome:
     # simulation (see reality_engine/pipeline/orchestrator.py).
     memory_summary: str | None = None
     memory_embedding: tuple[float, ...] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class RealityEngineStageEvent:
+    """One agent started or finished, mid-run.
+
+    `stage` stays an opaque string rather than an enum mirroring Reality
+    Engine's own: this service has no opinion about which agents exist,
+    and a copy of that list here would be a copy to keep in sync for no
+    benefit — it is relayed to the client, not branched on.
+
+    There is deliberately no separate "halted" event, even though Reality
+    Engine emits one: a halt is already fully described by the outcome's
+    `safe_to_proceed`, and two representations of the same fact are two
+    things that can disagree.
+    """
+
+    stage: str
+    status: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,6 +116,17 @@ class RealityEngineClient(ABC):
     async def simulate(
         self, raw_input: str, declared_goals: list[str]
     ) -> RealityEngineSimulationOutcome: ...
+
+    @abstractmethod
+    def simulate_stream(
+        self, raw_input: str, declared_goals: list[str]
+    ) -> AsyncIterator[RealityEngineStageEvent | RealityEngineSimulationOutcome]:
+        """The same run as `simulate`, reporting each stage as it happens.
+
+        Yields stage events as they arrive and the outcome last. Declared
+        as a plain method returning an iterator rather than an `async def`
+        generator so implementations are free to be either.
+        """
 
     @abstractmethod
     async def calibrate(

@@ -18,9 +18,10 @@ from core_api.simulations.application.use_cases import (
     ReportDecisionOutcomeInput,
     ReportDecisionOutcomeUseCase,
     RunSimulationInput,
+    RunSimulationStreamUseCase,
     RunSimulationUseCase,
 )
-from core_api.simulations.domain.entities import SimulationStatus
+from core_api.simulations.domain.entities import Simulation, SimulationStageEvent, SimulationStatus
 from core_api.simulations.domain.exceptions import (
     DecisionOutcomeAlreadyReportedError,
     NoCompletedSimulationError,
@@ -31,6 +32,7 @@ from core_api.simulations.domain.reality_engine_port import (
     RealityEngineError,
     RealityEngineScenario,
     RealityEngineSimulationOutcome,
+    RealityEngineStageEvent,
 )
 from tests.unit.decisions.fakes import InMemoryDecisionRepository
 from tests.unit.goals.fakes import InMemoryGoalRepository
@@ -267,6 +269,140 @@ async def test_run_simulation_rejects_already_completed_decision() -> None:
         await use_case.execute(
             RunSimulationInput(decision_id=decision.id, requesting_user_id=user_id)
         )
+
+
+@pytest.mark.asyncio
+async def test_run_simulation_stream_yields_stages_before_the_final_simulation() -> None:
+    decisions = InMemoryDecisionRepository()
+    goals = InMemoryGoalRepository()
+    simulations = InMemorySimulationRepository()
+    memories = InMemoryMemoryEmbeddingRepository()
+    stage_events = [
+        RealityEngineStageEvent(stage="safety_gate", status="started"),
+        RealityEngineStageEvent(stage="safety_gate", status="completed"),
+        RealityEngineStageEvent(stage="comprehension", status="started"),
+        RealityEngineStageEvent(stage="comprehension", status="completed"),
+    ]
+    reality_engine = FakeRealityEngineClient(
+        responses=[_safe_outcome()], stream_events=stage_events
+    )
+    user_id = uuid4()
+    decision = await _make_draft_decision(decisions, user_id)
+
+    use_case = RunSimulationStreamUseCase(decisions, goals, simulations, reality_engine, memories)
+    events = [
+        event
+        async for event in use_case.execute(
+            RunSimulationInput(decision_id=decision.id, requesting_user_id=user_id)
+        )
+    ]
+
+    stages = events[:-1]
+    final = events[-1]
+    assert stages == [
+        SimulationStageEvent(stage="safety_gate", status="started"),
+        SimulationStageEvent(stage="safety_gate", status="completed"),
+        SimulationStageEvent(stage="comprehension", status="started"),
+        SimulationStageEvent(stage="comprehension", status="completed"),
+    ]
+    assert isinstance(final, Simulation)
+    assert final.status == SimulationStatus.COMPLETED
+    assert reality_engine.stream_calls == [(decision.raw_input, [])]
+
+
+@pytest.mark.asyncio
+async def test_run_simulation_stream_raises_before_any_stage_when_decision_not_owned() -> None:
+    decisions = InMemoryDecisionRepository()
+    goals = InMemoryGoalRepository()
+    simulations = InMemorySimulationRepository()
+    memories = InMemoryMemoryEmbeddingRepository()
+    reality_engine = FakeRealityEngineClient()
+    owner_id = uuid4()
+    decision = await _make_draft_decision(decisions, owner_id)
+
+    use_case = RunSimulationStreamUseCase(decisions, goals, simulations, reality_engine, memories)
+    events = use_case.execute(
+        RunSimulationInput(decision_id=decision.id, requesting_user_id=uuid4())
+    )
+    with pytest.raises(DecisionNotFoundError):
+        await anext(events)
+    assert reality_engine.stream_calls == []
+
+
+@pytest.mark.asyncio
+async def test_run_simulation_stream_failure_mid_stream_still_persists_a_failed_simulation() -> (
+    None
+):
+    decisions = InMemoryDecisionRepository()
+    goals = InMemoryGoalRepository()
+    simulations = InMemorySimulationRepository()
+    memories = InMemoryMemoryEmbeddingRepository()
+
+    class _FailingMidStreamClient(FakeRealityEngineClient):
+        async def simulate_stream(  # type: ignore[override]
+            self, raw_input: str, declared_goals: list[str]
+        ) -> object:
+            self.stream_calls.append((raw_input, declared_goals))
+            yield RealityEngineStageEvent(stage="safety_gate", status="started")
+            raise RealityEngineError("connection dropped")
+
+    reality_engine = _FailingMidStreamClient()
+    user_id = uuid4()
+    decision = await _make_draft_decision(decisions, user_id)
+
+    use_case = RunSimulationStreamUseCase(decisions, goals, simulations, reality_engine, memories)
+    events = [
+        event
+        async for event in use_case.execute(
+            RunSimulationInput(decision_id=decision.id, requesting_user_id=user_id)
+        )
+    ]
+
+    assert events[0] == SimulationStageEvent(stage="safety_gate", status="started")
+    final = events[-1]
+    assert isinstance(final, Simulation)
+    assert final.status == SimulationStatus.FAILED
+
+
+@pytest.mark.asyncio
+async def test_run_simulation_stream_matches_the_unary_use_case_for_the_same_outcome() -> None:
+    outcome = _safe_outcome()
+
+    decisions_a = InMemoryDecisionRepository()
+    goals_a = InMemoryGoalRepository()
+    simulations_a = InMemorySimulationRepository()
+    memories_a = InMemoryMemoryEmbeddingRepository()
+    user_id = uuid4()
+    decision_a = await _make_draft_decision(decisions_a, user_id)
+    unary_simulation = await RunSimulationUseCase(
+        decisions_a,
+        goals_a,
+        simulations_a,
+        FakeRealityEngineClient(responses=[outcome]),
+        memories_a,
+    ).execute(RunSimulationInput(decision_id=decision_a.id, requesting_user_id=user_id))
+
+    decisions_b = InMemoryDecisionRepository()
+    goals_b = InMemoryGoalRepository()
+    simulations_b = InMemorySimulationRepository()
+    memories_b = InMemoryMemoryEmbeddingRepository()
+    decision_b = await _make_draft_decision(decisions_b, user_id)
+    stream_events = [
+        event
+        async for event in RunSimulationStreamUseCase(
+            decisions_b,
+            goals_b,
+            simulations_b,
+            FakeRealityEngineClient(responses=[outcome]),
+            memories_b,
+        ).execute(RunSimulationInput(decision_id=decision_b.id, requesting_user_id=user_id))
+    ]
+    streamed_simulation = stream_events[-1]
+    assert isinstance(streamed_simulation, Simulation)
+
+    assert streamed_simulation.status == unary_simulation.status
+    assert streamed_simulation.synthesis_text == unary_simulation.synthesis_text
+    assert len(streamed_simulation.scenarios) == len(unary_simulation.scenarios)
 
 
 @pytest.mark.asyncio

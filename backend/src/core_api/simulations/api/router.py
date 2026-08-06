@@ -8,10 +8,12 @@ ownership against the caller's JWT identity before returning anything
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 
 from core_api.decisions.domain.exceptions import DecisionNotFoundError
 from core_api.decisions.domain.repositories import DecisionRepository
@@ -33,6 +35,9 @@ from core_api.simulations.api.schemas import (
     ReportDecisionOutcomeRequest,
     SimulationResponse,
     SimulationScenarioResponse,
+    SimulationStreamErrorResponse,
+    SimulationStreamResultResponse,
+    SimulationStreamStageResponse,
 )
 from core_api.simulations.application.use_cases import (
     GetSimulationUseCase,
@@ -41,9 +46,10 @@ from core_api.simulations.application.use_cases import (
     ReportDecisionOutcomeInput,
     ReportDecisionOutcomeUseCase,
     RunSimulationInput,
+    RunSimulationStreamUseCase,
     RunSimulationUseCase,
 )
-from core_api.simulations.domain.entities import DecisionOutcome, Simulation
+from core_api.simulations.domain.entities import DecisionOutcome, Simulation, SimulationStageEvent
 from core_api.simulations.domain.exceptions import (
     DecisionOutcomeAlreadyReportedError,
     NoCompletedSimulationError,
@@ -117,6 +123,81 @@ async def run_simulation(
             status_code=status.HTTP_404_NOT_FOUND, detail="Decision not found"
         ) from exc
     return _to_response(simulation)
+
+
+def _stream_event_line(event: SimulationStageEvent | Simulation) -> str:
+    line: SimulationStreamStageResponse | SimulationStreamResultResponse
+    if isinstance(event, SimulationStageEvent):
+        line = SimulationStreamStageResponse(stage=event.stage, status=event.status)
+    else:
+        line = SimulationStreamResultResponse(result=_to_response(event))
+    return line.model_dump_json() + "\n"
+
+
+async def _stream_lines(
+    events: AsyncIterator[SimulationStageEvent | Simulation],
+    first_event: SimulationStageEvent | Simulation,
+) -> AsyncIterator[str]:
+    try:
+        yield _stream_event_line(first_event)
+        async for event in events:
+            yield _stream_event_line(event)
+    except Exception:
+        # By now the response's 200 and headers are already on the wire —
+        # that's inherent to streaming — so a failure has to be said in a
+        # line rather than an HTTP status. Without this, a mid-run failure
+        # would just truncate the body, which a client can't tell apart
+        # from a dropped connection. Same discipline as reality_engine's
+        # own `api/streaming.py`.
+        yield SimulationStreamErrorResponse(
+            message="La simulación no pudo completarse."
+        ).model_dump_json() + "\n"
+
+
+@router.post("/decisions/{decision_id}/simulations/stream")
+async def run_simulation_stream(
+    decision_id: UUID,
+    identity: Annotated[AuthenticatedIdentity, Depends(get_current_identity)],
+    decision_repository: Annotated[DecisionRepository, Depends(get_decision_repository)],
+    goal_repository: Annotated[GoalRepository, Depends(get_goal_repository)],
+    simulation_repository: Annotated[SimulationRepository, Depends(get_simulation_repository)],
+    reality_engine_client: Annotated[RealityEngineClient, Depends(get_reality_engine_client)],
+    memory_repository: Annotated[
+        MemoryEmbeddingRepository, Depends(get_memory_embedding_repository)
+    ],
+) -> StreamingResponse:
+    """The same run as `POST /decisions/{id}/simulations`, reporting each
+    Reality Engine stage as it happens (docs/UX_DESIGN.md Pantalla 6).
+
+    Ownership is checked *before* the stream starts. `StreamingResponse`
+    sends its status and headers the moment its body iterator is first
+    asked for a chunk, so a `DecisionNotFoundError` raised inside that
+    iterator would arrive too late to become a 404 — the 200 would already
+    be gone. Advancing the use case's generator by one step out here, still
+    inside the ordinary request/response flow, is what keeps an ownership
+    failure a normal HTTP error instead of a line inside an already-200
+    stream.
+    """
+    use_case = RunSimulationStreamUseCase(
+        decision_repository,
+        goal_repository,
+        simulation_repository,
+        reality_engine_client,
+        memory_repository,
+    )
+    events = use_case.execute(
+        RunSimulationInput(decision_id=decision_id, requesting_user_id=identity.id)
+    )
+    try:
+        first_event = await anext(events)
+    except DecisionNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Decision not found"
+        ) from exc
+
+    return StreamingResponse(
+        _stream_lines(events, first_event), media_type="application/x-ndjson"
+    )
 
 
 @router.get("/decisions/{decision_id}/simulations", response_model=list[SimulationResponse])
