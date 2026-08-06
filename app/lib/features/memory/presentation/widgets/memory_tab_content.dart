@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../design_system/var_palette.dart';
 import '../../../../design_system/var_spacing.dart';
 import '../../../../design_system/var_typography.dart';
+import '../../../privacy/presentation/widgets/privacy_actions.dart';
 import '../controllers/bias_profile_controller.dart';
 import 'bias_pattern_card.dart';
 import 'calibration_gauge.dart';
@@ -12,19 +13,12 @@ import 'calibration_gauge.dart';
 /// radical" over the patterns the system has detected, plus the
 /// `calibration_score` gauge and visible GDPR actions.
 ///
-/// "Exportar mis datos" / "Borrar todo mi historial" are real buttons
-/// (the spec is explicit they must not be hidden in a settings submenu),
-/// but the backend has no export/delete-all endpoint yet — tapping either
-/// shows a "coming soon" notice rather than faking the action, same
-/// posture as Home's decision input before decision creation was wired.
+/// "Exportar mis datos" / "Borrar todo mi historial" are real and live
+/// here rather than in a settings submenu, which the spec is explicit
+/// about: the point is that they're visible. The same two actions also
+/// appear in Ajustes, sharing one widget (`PrivacyActions`).
 class MemoryTabContent extends ConsumerWidget {
   const MemoryTabContent({super.key});
-
-  void _showComingSoon(BuildContext context, String action) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$action llega en un próximo módulo.')),
-    );
-  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -50,19 +44,7 @@ class MemoryTabContent extends ConsumerWidget {
             for (final observation in profile.biases)
               BiasPatternCard(observation: observation),
           const SizedBox(height: VarSpacing.xl),
-          OutlinedButton(
-            onPressed: () => _showComingSoon(context, 'Exportar mis datos'),
-            child: const Text('Exportar mis datos'),
-          ),
-          const SizedBox(height: VarSpacing.sm),
-          OutlinedButton(
-            onPressed: () =>
-                _showComingSoon(context, 'Borrar todo mi historial'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: context.varColors.signalLow,
-            ),
-            child: const Text('Borrar todo mi historial'),
-          ),
+          const PrivacyActions(),
         ],
       ),
       loading: () =>

@@ -20,6 +20,11 @@ abstract class AuthRepository {
   /// anyone else (`GetOrCreateUserUseCase`).
   Future<void> continueAnonymously();
 
+  /// Ends the session. Called after an erasure: keeping a token for a
+  /// user whose rows are gone would leave every screen 404-ing with no
+  /// explanation.
+  Future<void> signOut();
+
   /// The current access token, or `null` when there is no session.
   ///
   /// Synchronous because the Dio interceptor needs it on every request; the

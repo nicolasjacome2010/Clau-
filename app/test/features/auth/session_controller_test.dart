@@ -28,6 +28,9 @@ class _FakeAuthRepository implements AuthRepository {
 
   @override
   Future<void> continueAnonymously() async {}
+
+  @override
+  Future<void> signOut() async {}
 }
 
 /// Records the headers of whatever request reaches the transport, so the

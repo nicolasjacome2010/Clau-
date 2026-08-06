@@ -6,18 +6,17 @@ import '../../../../core/routing/app_routes.dart';
 import '../../../../design_system/var_palette.dart';
 import '../../../../design_system/var_spacing.dart';
 import '../../../../design_system/var_typography.dart';
+import '../../../privacy/presentation/widgets/privacy_actions.dart';
 import '../controllers/settings_controller.dart';
 
 /// Pantalla 15 — Ajustes (docs/UX_DESIGN.md).
 ///
-/// The spec lists four sections. Only appearance is actually wired, and the
-/// other three say why rather than pretending: privacy needs data
-/// export/delete endpoints the Core API doesn't have, close-the-loop
-/// reminders need a notification service and a scheduler that don't exist,
-/// and the language switch needs a localization pass this app hasn't had
-/// (every string is Spanish, in source). Listing them as "próximamente" is
-/// the honest shape of a settings screen mid-build — a switch that toggles
-/// nothing would be worse than an absence.
+/// Appearance and privacy are wired for real. The remaining two say why
+/// they aren't rather than pretending: close-the-loop reminders need a
+/// notification service and a scheduler that don't exist, and the language
+/// switch needs a localization pass this app hasn't had (every string is
+/// Spanish, in source). A switch that toggles nothing would be worse than
+/// an absence.
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
@@ -63,16 +62,7 @@ class SettingsScreen extends ConsumerWidget {
             ),
             const SizedBox(height: VarSpacing.lg),
             _SectionTitle('Privacidad'),
-            const _PendingTile(
-              title: 'Exportar mis datos',
-              reason:
-                  'Falta el endpoint de exportación en el backend. También '
-                  'está en Memoria, donde el spec pide que sea visible.',
-            ),
-            const _PendingTile(
-              title: 'Borrar todo mi historial',
-              reason: 'Falta el endpoint de borrado en el backend.',
-            ),
+            const PrivacyActions(),
             const SizedBox(height: VarSpacing.lg),
             _SectionTitle('Notificaciones'),
             const _PendingTile(

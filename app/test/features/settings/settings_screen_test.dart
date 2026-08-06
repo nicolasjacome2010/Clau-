@@ -103,13 +103,8 @@ void main() {
     // Better than a switch that toggles nothing: the user learns why.
     await pumpSettings(tester, settings: _FakeSettingsRepository());
 
-    expect(find.text('Exportar mis datos'), findsOneWidget);
-    expect(find.text('Borrar todo mi historial'), findsOneWidget);
     expect(find.text('Recordatorios de cierre de ciclo'), findsOneWidget);
-    expect(
-      find.textContaining('Falta el endpoint de exportación'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('servicio de notificaciones'), findsOneWidget);
 
     // The last section is below the fold, and a lazy `ListView` hasn't
     // built it yet.
@@ -117,6 +112,15 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('solo en español por ahora'), findsOneWidget);
+  });
+
+  testWidgets('offers the real privacy actions, not a pending notice', (
+    tester,
+  ) async {
+    await pumpSettings(tester, settings: _FakeSettingsRepository());
+
+    expect(find.text('Exportar mis datos'), findsOneWidget);
+    expect(find.text('Borrar todo mi historial'), findsOneWidget);
   });
 
   testWidgets('links to Suscripción', (tester) async {

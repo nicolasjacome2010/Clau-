@@ -124,27 +124,14 @@ void main() {
     expect(find.text('Borrar todo mi historial'), findsOneWidget);
   });
 
-  testWidgets('tapping export shows a coming-soon notice', (tester) async {
+  testWidgets('keeps the GDPR actions visible, not buried in a submenu', (
+    tester,
+  ) async {
+    // docs/UX_DESIGN.md Pantalla 12 is explicit about this. What they do is
+    // covered in `../privacy/privacy_actions_test.dart`.
     await pumpTab(tester, repository: FakeMemoryRepository());
 
-    await tester.tap(find.text('Exportar mis datos'));
-    await tester.pump();
-
-    expect(
-      find.text('Exportar mis datos llega en un próximo módulo.'),
-      findsOneWidget,
-    );
-  });
-
-  testWidgets('tapping delete-all shows a coming-soon notice', (tester) async {
-    await pumpTab(tester, repository: FakeMemoryRepository());
-
-    await tester.tap(find.text('Borrar todo mi historial'));
-    await tester.pump();
-
-    expect(
-      find.text('Borrar todo mi historial llega en un próximo módulo.'),
-      findsOneWidget,
-    );
+    expect(find.text('Exportar mis datos'), findsOneWidget);
+    expect(find.text('Borrar todo mi historial'), findsOneWidget);
   });
 }

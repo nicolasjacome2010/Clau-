@@ -64,6 +64,11 @@ lib/
     home/                      # Pantalla 4 — "El Mapa de Realidades", REAL (no placeholder)
       presentation/
         widgets/                  # input de decisión, card de decisión activa (compacta), nav shell
+    privacy/                   # los dos derechos GDPR, compartidos por Memoria y Ajustes
+      domain/                    # PrivacyRepository (puerto) + ExportSharer (puerto)
+      data/api_privacy_repository.dart  # GET /v1/privacy/export, DELETE /v1/privacy/data
+      data/share_plus_export_sharer.dart # share sheet del sistema, con el .json adjunto
+      presentation/               # PrivacyController + privacy_actions.dart (widget compartido)
     memory/                    # Pantalla 12 — Memoria, REAL
       domain/                    # BiasObservation, UserBiasProfile, MemoryRepository (puerto)
       data/api_memory_repository.dart # adaptador real: GET /v1/memory/bias-profile vía Dio
@@ -139,7 +144,9 @@ test/
 - **Ajustes solo controla lo que de verdad puede controlar.** La apariencia (Dark/Claro/Como el sistema) es real: se persiste en el dispositivo y `MaterialApp` la sigue. Privacidad, notificaciones e idioma aparecen con el motivo por el que todavía no funcionan (faltan endpoints de exportación/borrado, no hay servicio de notificaciones, la app está solo en español). Un switch que no conmuta nada sería peor que su ausencia.
 - **La apariencia es una preferencia del dispositivo, no del perfil.** Un teléfono en oscuro de noche y un escritorio en claro de día son el mismo usuario, así que sincronizarla al servidor sería incorrecto, no solo trabajo extra. Se guarda el *nombre* del enum, no su índice: un índice repuntaría en silencio todas las preferencias guardadas el día que alguien reordene `ThemeMode`.
 - **El default es "como el sistema", y la recomendación de dark es copy, no una elección pre-hecha** por el usuario (el spec pide exactamente eso). Mientras la preferencia guardada se lee, se muestra dark: es el tema diseñado primero, así que quien eligió dark no ve un flash claro al arrancar.
-- **Memoria (Pantalla 12) tiene los botones "Exportar mis datos"/"Borrar todo mi historial" visibles pero sin backend detrás.** El spec es explícito en que deben ser visibles (no escondidos en Ajustes), pero el backend no tiene ningún endpoint de exportación/borrado de datos todavía — tocarlos muestra un aviso "llega en un próximo módulo" en vez de fingir la acción. `bias.bias` se renderiza tal cual lo escribió el LLM (docs/REALITY_ENGINE.md Agente 5/12: es texto libre en español, no un código), así que no hay tabla de traducción cliente-side que mantener sincronizada.
+- **Los dos derechos GDPR son reales y viven en dos lugares a propósito.** El spec pide que estén visibles en Memoria (no escondidos en un submenú) y la gente los busca en Ajustes, así que ambas pantallas montan el mismo widget `PrivacyActions`. La exportación sale por el share sheet del sistema con el JSON **adjunto como archivo**, no como texto en un mensaje: "formato portable" en el sentido que el derecho realmente significa. El documento se re-serializa indentado —alguien lo va a leer— pero sin re-parsearlo a tipos del cliente: la app no debe descartar campos que todavía no modela, y hay un test que fija eso.
+- **El borrado pregunta primero, y dice qué se va.** "Se eliminarán tus datos" es técnicamente cierto y no informa nada; el diálogo nombra decisiones, simulaciones, lo aprendido y los objetivos, y aclara que no hay forma de recuperarlo. Al confirmar **se cierra la sesión**: el token sigue siendo válido para un usuario cuyas filas ya no existen, así que quedarse dentro dejaría cada pantalla fallando sin explicación posible.
+- **`bias.bias` se renderiza tal cual lo escribió el LLM** (docs/REALITY_ENGINE.md Agente 5/12: es texto libre en español, no un código), así que no hay tabla de traducción cliente-side que mantener sincronizada.
 
 ## Desarrollo local
 

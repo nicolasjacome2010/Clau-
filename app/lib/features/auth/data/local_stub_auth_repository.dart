@@ -21,6 +21,9 @@ class LocalStubAuthRepository implements AuthRepository {
     await Future<void>.delayed(const Duration(milliseconds: 150));
   }
 
+  @override
+  Future<void> signOut() async {}
+
   /// Never a fabricated token: an unauthenticated request that gets a
   /// truthful 401 is better than one carrying a token no server accepts.
   @override

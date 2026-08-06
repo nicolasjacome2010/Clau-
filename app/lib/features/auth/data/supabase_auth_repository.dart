@@ -38,6 +38,9 @@ class SupabaseAuthRepository implements AuthRepository {
   }
 
   @override
+  Future<void> signOut() => _client.auth.signOut();
+
+  @override
   String? get currentAccessToken => _client.auth.currentSession?.accessToken;
 
   @override
