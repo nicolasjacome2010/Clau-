@@ -9,10 +9,11 @@ import 'package:var_os_app/features/decisions/domain/decision_ref.dart';
 import 'package:var_os_app/features/decisions/presentation/controllers/decisions_controller.dart';
 import 'package:var_os_app/features/memory/presentation/controllers/bias_profile_controller.dart';
 import 'package:var_os_app/features/simulations/domain/simulation.dart';
+import 'package:var_os_app/features/simulations/domain/simulation_progress.dart';
 import 'package:var_os_app/features/simulations/domain/simulations_repository.dart';
 import 'package:var_os_app/features/simulations/presentation/controllers/decision_simulation_controller.dart';
 import 'package:var_os_app/features/simulations/presentation/screens/decision_result_screen.dart';
-import 'package:var_os_app/features/simulations/presentation/widgets/running_indicator.dart';
+import 'package:var_os_app/features/simulations/presentation/widgets/live_simulation_view.dart';
 import 'package:var_os_app/features/simulations/presentation/widgets/safety_referral.dart';
 import 'package:var_os_app/features/simulations/presentation/widgets/scenario_card.dart';
 import 'package:var_os_app/features/simulations/presentation/widgets/synthesis_section.dart';
@@ -222,14 +223,50 @@ void main() {
       await tester.tap(find.text('Simular ahora'));
       await tester.pump();
 
-      expect(find.byType(RunningIndicator), findsOneWidget);
+      expect(find.byType(LiveSimulationView), findsOneWidget);
 
       gate.complete();
       await tester.pumpAndSettle();
 
       expect(repository.runCalls, ['d1']);
-      expect(find.byType(RunningIndicator), findsNothing);
+      expect(find.byType(LiveSimulationView), findsNothing);
       expect(find.text('Aceptar la oferta'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'lights up each stage row as its stream events arrive, never all at once',
+    (tester) async {
+      final gate = Completer<void>();
+      await pumpResult(
+        tester,
+        repository: FakeSimulationsRepository(
+          runGate: gate,
+          streamStages: const [
+            SimulationStageProgress(stage: 'safety_gate', status: 'started'),
+            SimulationStageProgress(stage: 'safety_gate', status: 'completed'),
+            SimulationStageProgress(stage: 'comprehension', status: 'started'),
+          ],
+        ),
+      );
+
+      await tester.tap(find.text('Simular ahora'));
+      // One pump to process the tap and enter `isRunning`, a second to let
+      // the fake's already-available stream events (nothing async blocks
+      // them but the trailing `runGate`) settle into state.
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Comprendiendo'), findsOneWidget);
+      expect(find.text('Analizando objetivos'), findsOneWidget);
+      // "Comprendiendo" covers safety_gate + comprehension + summary: with
+      // comprehension only started (not completed) the row must read as in
+      // progress, never done — done requires every agent it covers.
+      expect(find.byIcon(Icons.check_circle), findsNothing);
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+
+      gate.complete();
+      await tester.pumpAndSettle();
     },
   );
 
@@ -253,7 +290,7 @@ void main() {
     );
 
     await tester.pump(
-      RunningIndicator.reassuranceAfter + const Duration(seconds: 1),
+      LiveSimulationView.reassuranceAfter + const Duration(seconds: 1),
     );
 
     expect(

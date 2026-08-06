@@ -1,7 +1,10 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 
 import '../domain/decision_outcome.dart';
 import '../domain/simulation.dart';
+import '../domain/simulation_progress.dart';
 import '../domain/simulations_repository.dart';
 
 /// Real adapter over `GET`/`POST /v1/decisions/{id}/simulations`,
@@ -113,6 +116,70 @@ class ApiSimulationsRepository implements SimulationsRepository {
       );
     }
     return _toSimulation(response.data);
+  }
+
+  @override
+  Stream<SimulationProgressEvent> runSimulationStream(
+    String decisionId,
+  ) async* {
+    final Response<ResponseBody> response;
+    try {
+      response = await _dio.post<ResponseBody>(
+        '/v1/decisions/$decisionId/simulations/stream',
+        options: Options(
+          responseType: ResponseType.stream,
+          receiveTimeout: _runTimeout,
+          sendTimeout: _runTimeout,
+        ),
+      );
+    } on DioException catch (exc) {
+      // Headers (and, on a 404, the status) arrive before this future
+      // resolves even in stream mode — an ownership failure lands here as a
+      // real exception, never as a line inside the body.
+      throw SimulationsRepositoryError(
+        'Failed to start simulation stream: ${exc.message}',
+      );
+    }
+
+    final lines = response.data!.stream
+        .cast<List<int>>()
+        .transform(utf8.decoder)
+        .transform(const LineSplitter());
+
+    await for (final line in lines) {
+      if (line.trim().isEmpty) continue;
+      yield _toProgressEvent(line);
+    }
+  }
+
+  SimulationProgressEvent _toProgressEvent(String line) {
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(line);
+    } on FormatException {
+      throw SimulationsRepositoryError('Malformed stream line: $line');
+    }
+    if (decoded is! Map) {
+      throw SimulationsRepositoryError('Unexpected stream event shape');
+    }
+
+    switch (decoded['type']) {
+      case 'stage':
+        return SimulationStageProgress(
+          stage: decoded['stage'] as String,
+          status: decoded['status'] as String,
+        );
+      case 'result':
+        return SimulationProgressResult(_toSimulation(decoded['result']));
+      case 'error':
+        return SimulationProgressError(
+          decoded['message'] as String? ?? 'La simulación no pudo completarse.',
+        );
+      default:
+        throw SimulationsRepositoryError(
+          'Unexpected stream event type: ${decoded['type']}',
+        );
+    }
   }
 
   @override

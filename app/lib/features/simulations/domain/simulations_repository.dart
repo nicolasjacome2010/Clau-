@@ -1,16 +1,19 @@
 import 'decision_outcome.dart';
 import 'simulation.dart';
+import 'simulation_progress.dart';
 
 /// Port over the backend's `simulations` bounded context
 /// (backend/src/core_api/simulations/api/router.py).
 ///
 /// `runSimulation` is a single blocking call that can take 15-30s: the
-/// backend calls Reality Engine synchronously and there is no progress
-/// channel yet (docs/ARCHITECTURE.md §2.2 describes a queue + WebSocket
-/// streaming that isn't built). That's why the client shows an honest
-/// indeterminate wait instead of Pantalla 6's stage-by-stage animation —
-/// a fake progress bar over an opaque call would be exactly the kind of
-/// thing docs/UX_DESIGN.md §2 warns "rompería confianza si se estanca".
+/// backend calls Reality Engine synchronously. `runSimulationStream` is the
+/// same run over `POST .../simulations/stream`'s NDJSON body, reporting
+/// each Reality Engine agent as it starts/finishes (docs/UX_DESIGN.md
+/// Pantalla 6) — `DecisionSimulationController.run()` uses this one, so the
+/// screen can light up real stages instead of the indeterminate wait a
+/// blocking call would force. `runSimulation` stays on the port too: it's
+/// still a real, separately useful backend endpoint, not dead code kept
+/// around out of caution.
 ///
 /// `reportOutcome` closes the loop (docs/PRD.md CU8): it hands the user's
 /// account of what really happened to Agente 12, which recalibrates the
@@ -22,6 +25,13 @@ abstract class SimulationsRepository {
   Future<List<Simulation>> listForDecision(String decisionId);
 
   Future<Simulation> runSimulation(String decisionId);
+
+  /// Throws `SimulationsRepositoryError` (as a stream error, not a thrown
+  /// `Future`) if the request itself fails before any bytes arrive — an
+  /// ownership 404 in particular, since the backend checks that before its
+  /// stream starts precisely so this stays a real error and not a line
+  /// inside an already-200 body.
+  Stream<SimulationProgressEvent> runSimulationStream(String decisionId);
 
   Future<List<DecisionOutcome>> listOutcomes();
 

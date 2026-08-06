@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:var_os_app/features/simulations/domain/decision_outcome.dart';
 import 'package:var_os_app/features/simulations/domain/simulation.dart';
+import 'package:var_os_app/features/simulations/domain/simulation_progress.dart';
 import 'package:var_os_app/features/simulations/domain/simulations_repository.dart';
 
 class FakeSimulationsRepository implements SimulationsRepository {
@@ -11,6 +12,7 @@ class FakeSimulationsRepository implements SimulationsRepository {
     this.runError,
     this.ranSimulation,
     this.runGate,
+    this.streamStages,
     this.outcomeError,
     this.reportedOutcome,
     this.outcomeGate,
@@ -23,6 +25,11 @@ class FakeSimulationsRepository implements SimulationsRepository {
   final SimulationsRepositoryError? listError;
   final SimulationsRepositoryError? runError;
   final SimulationsRepositoryError? outcomeError;
+
+  /// Stage events `runSimulationStream` yields before its terminal event —
+  /// `null` skips straight to the result/error, same as a run that never
+  /// reported progress.
+  final List<SimulationStageProgress>? streamStages;
 
   /// What `reportOutcome` returns on success.
   final DecisionOutcome? reportedOutcome;
@@ -76,6 +83,28 @@ class FakeSimulationsRepository implements SimulationsRepository {
             testScenario(id: 's1', title: 'Escenario nuevo', rank: 1),
           ],
         );
+  }
+
+  @override
+  Stream<SimulationProgressEvent> runSimulationStream(
+    String decisionId,
+  ) async* {
+    runCalls.add(decisionId);
+    for (final stage in streamStages ?? const <SimulationStageProgress>[]) {
+      yield stage;
+    }
+    if (runGate != null) await runGate!.future;
+    if (runError != null) throw runError!;
+    yield SimulationProgressResult(
+      ranSimulation ??
+          testSimulation(
+            id: 'ran',
+            decisionId: decisionId,
+            scenarios: [
+              testScenario(id: 's1', title: 'Escenario nuevo', rank: 1),
+            ],
+          ),
+    );
   }
 
   /// Simulates the loop being closed by someone else (another device, a

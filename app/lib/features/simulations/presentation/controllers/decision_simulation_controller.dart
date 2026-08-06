@@ -4,6 +4,7 @@ import '../../../../core/network/api_client.dart';
 import '../../../decisions/presentation/controllers/decisions_controller.dart';
 import '../../data/api_simulations_repository.dart';
 import '../../domain/simulation.dart';
+import '../../domain/simulation_progress.dart';
 import '../../domain/simulations_repository.dart';
 
 final simulationsRepositoryProvider = Provider<SimulationsRepository>(
@@ -15,6 +16,7 @@ class DecisionSimulationState {
     this.simulation,
     this.isRunning = false,
     this.errorMessage,
+    this.liveProgress,
   });
 
   /// The most recent simulation for this decision, or `null` when the
@@ -22,6 +24,10 @@ class DecisionSimulationState {
   final Simulation? simulation;
   final bool isRunning;
   final String? errorMessage;
+
+  /// Stage-by-stage progress accumulated from the current run's stream —
+  /// only meaningful while `isRunning` is true (docs/UX_DESIGN.md Pantalla 6).
+  final LiveSimulationProgress? liveProgress;
 
   bool get hasResult => simulation != null;
 }
@@ -47,23 +53,68 @@ class DecisionSimulationController
     return ordered.first;
   }
 
+  /// Runs the simulation over `runSimulationStream`, so the screen can show
+  /// real stage-by-stage progress (docs/UX_DESIGN.md Pantalla 6) instead of
+  /// an indeterminate wait for the whole 15-30s pipeline.
   Future<void> run() async {
     final current = state.valueOrNull ?? const DecisionSimulationState();
     if (current.isRunning) return;
 
     state = AsyncData(
-      DecisionSimulationState(simulation: current.simulation, isRunning: true),
+      DecisionSimulationState(
+        simulation: current.simulation,
+        isRunning: true,
+        liveProgress: const LiveSimulationProgress(),
+      ),
     );
 
+    // Set once a terminal event (result or in-band error) arrives, so a
+    // stream that just ends — dropped connection, no terminal line — is
+    // still reported as a failure instead of leaving `isRunning` stuck true.
+    var settled = false;
     try {
-      final simulation = await ref
+      final events = ref
           .read(simulationsRepositoryProvider)
-          .runSimulation(arg);
-      // Running a simulation moves the decision's own status
-      // (draft → … → completed, see `RunSimulationUseCase`), so the shared
-      // decisions list is stale until it re-reads.
-      await ref.read(decisionsControllerProvider.notifier).refresh();
-      state = AsyncData(DecisionSimulationState(simulation: simulation));
+          .runSimulationStream(arg);
+      await for (final event in events) {
+        switch (event) {
+          case SimulationStageProgress():
+            final progress =
+                (state.valueOrNull?.liveProgress ??
+                        const LiveSimulationProgress())
+                    .withEvent(event);
+            state = AsyncData(
+              DecisionSimulationState(
+                simulation: current.simulation,
+                isRunning: true,
+                liveProgress: progress,
+              ),
+            );
+          case SimulationProgressResult(:final simulation):
+            settled = true;
+            // Running a simulation moves the decision's own status
+            // (draft → … → completed, see `RunSimulationUseCase`), so the
+            // shared decisions list is stale until it re-reads.
+            await ref.read(decisionsControllerProvider.notifier).refresh();
+            state = AsyncData(DecisionSimulationState(simulation: simulation));
+          case SimulationProgressError(:final message):
+            settled = true;
+            state = AsyncData(
+              DecisionSimulationState(
+                simulation: current.simulation,
+                errorMessage: message,
+              ),
+            );
+        }
+      }
+      if (!settled) {
+        state = AsyncData(
+          DecisionSimulationState(
+            simulation: current.simulation,
+            errorMessage: 'No pudimos completar la simulación.',
+          ),
+        );
+      }
     } catch (error) {
       state = AsyncData(
         DecisionSimulationState(

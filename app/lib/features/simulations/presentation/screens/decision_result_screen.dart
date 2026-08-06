@@ -5,24 +5,20 @@ import '../../../../design_system/var_palette.dart';
 import '../../../../design_system/var_spacing.dart';
 import '../../../../design_system/var_typography.dart';
 import '../../domain/simulation.dart';
+import '../../domain/simulation_progress.dart';
 import '../controllers/decision_simulation_controller.dart';
 import '../widgets/comparison_view.dart';
+import '../widgets/live_simulation_view.dart';
 import '../widgets/outcome_section.dart';
-import '../widgets/running_indicator.dart';
 import '../widgets/safety_referral.dart';
 import '../widgets/scenario_card.dart';
 import '../widgets/synthesis_section.dart';
 
-/// Pantallas 7 + 9 + 11 (docs/UX_DESIGN.md): a decision's simulated
-/// scenarios, the final synthesis, the entry point that runs the simulation,
-/// and — once it has completed — the close-the-loop prompt.
-///
-/// Pantalla 6 ("Simulación en vivo", the stage-by-stage streaming view) is
-/// deliberately not here: it needs a pipeline-progress WebSocket the
-/// backend doesn't expose (docs/ARCHITECTURE.md §2.2 describes it as
-/// future work). While the request is in flight this shows an honest
-/// indeterminate wait — never a synthetic progress bar, which the spec
-/// warns "rompería confianza si se estanca".
+/// Pantallas 6 + 7 + 9 + 11 (docs/UX_DESIGN.md): a decision's simulated
+/// scenarios, the final synthesis, the entry point that runs the simulation
+/// — with Pantalla 6's real stage-by-stage progress while it's in flight,
+/// via `LiveSimulationView` — and, once it has completed, the
+/// close-the-loop prompt.
 class DecisionResultScreen extends ConsumerWidget {
   const DecisionResultScreen({
     super.key,
@@ -80,7 +76,11 @@ class _Body extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (state.isRunning) return const RunningIndicator();
+    if (state.isRunning) {
+      return LiveSimulationView(
+        progress: state.liveProgress ?? const LiveSimulationProgress(),
+      );
+    }
 
     final simulation = state.simulation;
     if (simulation == null) {

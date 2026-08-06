@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:var_os_app/features/simulations/data/api_simulations_repository.dart';
+import 'package:var_os_app/features/simulations/domain/simulation_progress.dart';
 import 'package:var_os_app/features/simulations/domain/simulations_repository.dart';
 
 /// Same `httpx.MockTransport` equivalent the other repository tests use: no
@@ -11,6 +12,10 @@ import 'package:var_os_app/features/simulations/domain/simulations_repository.da
 class _FakeHttpClientAdapter implements HttpClientAdapter {
   _FakeHttpClientAdapter.json(this._body, {int status = 200})
     : _throws = null,
+      _status = status;
+  _FakeHttpClientAdapter.ndjson(List<String> lines, {int status = 200})
+    : _body = lines.map((line) => '$line\n').join(),
+      _throws = null,
       _status = status;
   _FakeHttpClientAdapter.throwing(Object error)
     : _body = null,
@@ -361,4 +366,97 @@ void main() {
       throwsA(isA<SimulationsRepositoryError>()),
     );
   });
+
+  test(
+    'runSimulationStream relays stage events in order, then the result',
+    () async {
+      final adapter = _FakeHttpClientAdapter.ndjson([
+        jsonEncode({
+          'type': 'stage',
+          'stage': 'safety_gate',
+          'status': 'started',
+        }),
+        jsonEncode({
+          'type': 'stage',
+          'stage': 'safety_gate',
+          'status': 'completed',
+        }),
+        jsonEncode({'type': 'result', 'result': _simulationJson()}),
+      ]);
+      final dio = _dioWith(adapter);
+
+      final events = await ApiSimulationsRepository(
+        dio,
+      ).runSimulationStream('d1').toList();
+
+      expect(events, hasLength(3));
+      final first = events[0] as SimulationStageProgress;
+      expect(first.stage, 'safety_gate');
+      expect(first.status, 'started');
+      final last = events[2] as SimulationProgressResult;
+      expect(last.simulation.id, 'sim-1');
+      expect(
+        adapter.requests.single.path,
+        '/v1/decisions/d1/simulations/stream',
+      );
+    },
+  );
+
+  test('runSimulationStream surfaces an in-band error line', () async {
+    final dio = _dioWith(
+      _FakeHttpClientAdapter.ndjson([
+        jsonEncode({
+          'type': 'stage',
+          'stage': 'safety_gate',
+          'status': 'started',
+        }),
+        jsonEncode({
+          'type': 'error',
+          'message': 'La simulación no pudo completarse.',
+        }),
+      ]),
+    );
+
+    final events = await ApiSimulationsRepository(
+      dio,
+    ).runSimulationStream('d1').toList();
+
+    expect(events, hasLength(2));
+    final error = events[1] as SimulationProgressError;
+    expect(error.message, 'La simulación no pudo completarse.');
+  });
+
+  test(
+    'runSimulationStream wraps an ownership 404 before any event, never as a line',
+    () async {
+      final dio = _dioWith(
+        _FakeHttpClientAdapter.json(
+          jsonEncode({'detail': 'Decision not found'}),
+          status: 404,
+        ),
+      );
+
+      expect(
+        ApiSimulationsRepository(dio).runSimulationStream('d1').toList(),
+        throwsA(isA<SimulationsRepositoryError>()),
+      );
+    },
+  );
+
+  test(
+    'runSimulationStream sends the same long timeout as runSimulation',
+    () async {
+      final adapter = _FakeHttpClientAdapter.ndjson([
+        jsonEncode({'type': 'result', 'result': _simulationJson()}),
+      ]);
+      final dio = _dioWith(adapter);
+
+      await ApiSimulationsRepository(dio).runSimulationStream('d1').toList();
+
+      expect(
+        adapter.requests.single.receiveTimeout,
+        greaterThanOrEqualTo(const Duration(seconds: 60)),
+      );
+    },
+  );
 }
