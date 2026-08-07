@@ -33,6 +33,17 @@ class Settings(BaseSettings):
     # (see pipeline/orchestrator.py).
     openai_embedding_model: str = "text-embedding-3-small"
 
+    # docs/ARCHITECTURE.md §2.6: Claude is the documented fallback for the
+    # "reasoning-creative" tier only (Agents 7/Generación de Escenarios and
+    # 10/Síntesis) — never for safety-classification or structured-
+    # extraction, which stay OpenAI/self-hosted territory per that same
+    # section. If unset, that tier simply has no fallback, same as today.
+    # Anthropic has no embeddings API, so there is no `anthropic_embedding_*`
+    # setting to add here — Agent 11 stays OpenAI-only until a different
+    # embedding vendor (e.g. Voyage AI) is wired up.
+    anthropic_api_key: str | None = None
+    anthropic_reasoning_model: str = "claude-opus-5"
+
 
 @lru_cache
 def get_settings() -> Settings:

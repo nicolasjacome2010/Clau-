@@ -39,6 +39,23 @@ def _build_providers_by_tier(settings: Settings) -> dict[ModelTier, list[LLMProv
             OpenAIProvider(client, model=settings.openai_reasoning_model)
         ]
 
+    if settings.anthropic_api_key:
+        # docs/ARCHITECTURE.md §2.6: Claude is the fallback for "reasoning-
+        # creative" only — appended after OpenAI so it's tried second when
+        # both are configured, per "OpenAI (primario), Claude (fallback si
+        # OpenAI degrada)". When OpenAI isn't configured at all, this still
+        # leaves the tier served by Claude alone rather than left empty.
+        from anthropic import AsyncAnthropic
+
+        from reality_engine.ai_gateway.infrastructure.anthropic_provider import (
+            AnthropicProvider,
+        )
+
+        anthropic_client = AsyncAnthropic(api_key=settings.anthropic_api_key)
+        providers[ModelTier.REASONING_CREATIVE] = providers[ModelTier.REASONING_CREATIVE] + [
+            AnthropicProvider(anthropic_client, model=settings.anthropic_reasoning_model)
+        ]
+
     return providers
 
 

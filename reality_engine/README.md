@@ -19,6 +19,8 @@ src/reality_engine/
     infrastructure/
       fake_provider.py, fake_embedding_provider.py   # dobles de test, sin red
       openai_provider.py, openai_embedding_provider.py # adaptadores reales, probados con cliente mockeado
+      anthropic_provider.py                            # fallback de reasoning_creative (tool use forzado
+                                                          # para salida estructurada), mismo posture de tests
   pipeline/
     domain/schemas.py         # contratos JSON de cada agente (Pydantic), Agentes 0-12
     agents/
@@ -51,6 +53,10 @@ Si `VAROS_RE_OPENAI_API_KEY` no está configurada, el tier `safety_classificatio
 
 La lista de patrones deterministas en `pipeline/agents/safety_gate.py` es un punto de partida, **no una lista validada clínica o legalmente** — está marcado explícitamente en el código. Antes de cualquier lanzamiento real hace falta revisión profesional (`docs/PRD.md §18`).
 
+## Decisión de diseño: multi-proveedor real, no solo el puerto
+
+`docs/ARCHITECTURE.md §0`/§2.6 justifican el `AI Gateway` propio precisamente para evitar acoplarse a un solo vendor — "OpenAI (primario), Claude (fallback si OpenAI degrada)" para el tier `reasoning-creative` (Agentes 7 y 10, los de mayor impacto en calidad de salida). Eso ahora es código, no solo diseño: `ai_gateway/infrastructure/anthropic_provider.py` implementa `LLMProvider` contra la API de Anthropic — usando *tool use* con `tool_choice` forzado a una única tool nombrada como el `response_model`, el equivalente de Claude al `response_format=json_schema` de OpenAI, ya que Anthropic no tiene un modo de salida estructurada directo. `main.py`'s `_build_providers_by_tier` lo agrega **después** de OpenAI en la lista de `reasoning_creative` cuando ambas keys están configuradas (el orden es lo que decide qué prueba primero `AIGateway`'s loop de fallback), y lo deja como único proveedor de ese tier si solo `VAROS_RE_ANTHROPIC_API_KEY` está seteada — nunca en `safety_classification` ni `structured_extraction`, que el mismo `§2.6` reserva para el modelo económico/dedicado. Anthropic no ofrece una API de embeddings, así que el Agente 11 (Memoria) sigue dependiendo exclusivamente de OpenAI hasta que se conecte un proveedor de embeddings distinto (p. ej. Voyage AI).
+
 ## Decisión de diseño: guardianes lingüísticos, no reescritura silenciosa
 
 `docs/PRD.md §2` es no negociable en "nunca afirmar certeza" y "el usuario decide". Los Agentes 7 (Escenarios) y 10 (Síntesis) validan su propia salida contra listas de patrones (`pipeline/agents/_language_guards.py`) buscando lenguaje de futuro afirmativo ("serás", "pasará") o imperativo ("deberías", "debes"). Si lo encuentran, **piden al modelo que regenere** (hasta `max_language_retries` veces) — nunca reescriben o recortan el texto del modelo por su cuenta. Si el lenguaje problemático persiste, el agente falla con `LLMGenerationError` en vez de servir un resultado que viole el principio del producto. Misma lógica de humildad que en Agente 0: listas curadas, no un clasificador lingüístico riguroso.
@@ -68,7 +74,7 @@ El Agente 12 no corre en cada `/v1/simulate` — se dispara explícitamente vía
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-cp .env.example .env   # opcionalmente añade VAROS_RE_OPENAI_API_KEY
+cp .env.example .env   # opcionalmente añade VAROS_RE_OPENAI_API_KEY y/o VAROS_RE_ANTHROPIC_API_KEY
 
 uvicorn reality_engine.main:app --reload --port 8100
 ```
@@ -81,7 +87,7 @@ mypy src
 pytest -v
 ```
 
-Los tests corren sin `OPENAI_API_KEY` real: `FakeLLMProvider` cubre el pipeline y `test_openai_provider.py` verifica el adaptador contra un cliente `AsyncOpenAI` mockeado (prompt, parseo de JSON, mapeo de errores) — nunca contra la red.
+Los tests corren sin `OPENAI_API_KEY`/`ANTHROPIC_API_KEY` reales: `FakeLLMProvider` cubre el pipeline, `test_openai_provider.py`/`test_anthropic_provider.py` verifican cada adaptador contra un cliente mockeado (prompt/tool wiring, parseo, mapeo de errores) y `test_main.py` verifica el orden de fallback que arma `_build_providers_by_tier` — nunca contra la red.
 
 ## Streaming de progreso (`POST /v1/simulate/stream`)
 
