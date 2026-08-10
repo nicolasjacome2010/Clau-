@@ -1,0 +1,111 @@
+# VAR OS — Reality Engine
+
+Servicio independiente del Core API (`docs/ARCHITECTURE.md §2.2`): su perfil de carga (IO-bound esperando respuestas de IA, alta latencia, necesidad de colas) es fundamentalmente distinto al del resto del backend CRUD.
+
+**Estado actual: los 13 agentes de docs/REALITY_ENGINE.md están implementados.** `AnalysisPipeline` encadena 0-6 (`POST /v1/analyze`); `SimulationPipeline` la extiende con 7-11 (`POST /v1/simulate`) hasta producir escenarios rankeados, una síntesis, y — si hay proveedor de embeddings configurado — un resumen listo para memoria semántica. El Agente 12 (Aprendizaje) vive fuera de ambos pipelines, en su propio endpoint (`POST /v1/calibrate`), porque solo corre cuando un usuario reporta qué pasó realmente con una decisión pasada, no en cada simulación. Este servicio sigue sin conocer `user_id`/`decision_id` ni llamar a Core API directamente — persistir en `memory` es responsabilidad de `simulations`' `RunSimulationUseCase` en `backend/`, que ya consume esta respuesta. **`POST /v1/simulate/stream` reporta cada etapa mientras corre** (NDJSON, un evento JSON por línea), que es lo que la Pantalla 6 necesita; `/v1/simulate` queda intacto para quien no le interese el progreso. No hay todavía orquestador de grafo con paralelización real ni workers async (`docs/ARCHITECTURE.md §2.2`) — la ejecución sigue siendo secuencial, y la corrida vive y muere con la petición.
+
+## Por qué el Agente 0 primero
+
+Es el único paso del pipeline que **puede terminar la ejecución anticipadamente** (`docs/REALITY_ENGINE.md §1`), y su ausencia sería el bug de seguridad más grave posible en este producto: generar "escenarios de futuro" sobre una situación de crisis real. Se construyó junto con el `AI Gateway` porque es la pieza de infraestructura que todo agente futuro necesitará.
+
+## Estructura
+
+```
+src/reality_engine/
+  main.py, config.py        # app factory, settings (prefijo VAROS_RE_)
+  ai_gateway/
+    domain/ports.py          # LLMProvider, EmbeddingProvider (puertos), ModelTier, *GenerationError
+    application/gateway.py    # AIGateway: retry + fallback entre proveedores por tier, y para embeddings
+    infrastructure/
+      fake_provider.py, fake_embedding_provider.py   # dobles de test, sin red
+      openai_provider.py, openai_embedding_provider.py # adaptadores reales, probados con cliente mockeado
+      anthropic_provider.py                            # fallback de reasoning_creative (tool use forzado
+                                                          # para salida estructurada), mismo posture de tests
+  pipeline/
+    domain/schemas.py         # contratos JSON de cada agente (Pydantic), Agentes 0-12
+    agents/
+      safety_gate.py            # Agente 0: reglas deterministas + clasificador LLM, fail-safe
+      comprehension.py           # Agente 1
+      summary.py                 # Agente 2
+      goals_extraction.py        # Agente 3 (normaliza pesos de forma determinista)
+      emotions.py                 # Agente 4
+      psychology.py                # Agente 5
+      risk_analysis.py              # Agente 6
+      scenario_generation.py         # Agente 7 (tier reasoning_creative, valida lenguaje condicional)
+      comparison.py                   # Agente 8
+      ranking.py                       # Agente 9 — función pura, sin LLM
+      synthesis.py                      # Agente 10 (tier reasoning_creative, valida lenguaje no-imperativo)
+      memory.py                          # Agente 11: genera resumen + texto embebible
+      learning.py                         # Agente 12: calibración on-demand, fuera de los pipelines
+      _language_guards.py               # detectores compartidos de lenguaje determinista/imperativo
+    orchestrator.py             # AnalysisPipeline (0-6) y SimulationPipeline (0-11)
+  api/                        # router FastAPI (/v1/safety-check, /v1/analyze, /v1/simulate,
+                               # /v1/simulate/stream, /v1/calibrate) + streaming.py (NDJSON)
+tests/
+  unit/ai_gateway/            # retry/fallback (LLM y embeddings) + adaptadores OpenAI mockeados
+  unit/pipeline/               # cada agente aislado + ambos orquestadores
+  integration/                  # API vía TestClient
+```
+
+## Decisión de diseño: fail-safe, no fail-open
+
+Si `VAROS_RE_OPENAI_API_KEY` no está configurada, el tier `safety_classification` queda sin proveedores. El `SafetyGateAgent` **nunca deja pasar contenido sin clasificar**: sin proveedor configurado, o si el proveedor falla tras sus reintentos, la respuesta siempre es `HALT_AND_REFER`. Un despliegue mal configurado falla cerrado, no abierto — ver `config.py` y los tests en `tests/unit/pipeline/test_safety_gate.py`.
+
+La lista de patrones deterministas en `pipeline/agents/safety_gate.py` es un punto de partida, **no una lista validada clínica o legalmente** — está marcado explícitamente en el código. Antes de cualquier lanzamiento real hace falta revisión profesional (`docs/PRD.md §18`).
+
+## Decisión de diseño: multi-proveedor real, no solo el puerto
+
+`docs/ARCHITECTURE.md §0`/§2.6 justifican el `AI Gateway` propio precisamente para evitar acoplarse a un solo vendor — "OpenAI (primario), Claude (fallback si OpenAI degrada)" para el tier `reasoning-creative` (Agentes 7 y 10, los de mayor impacto en calidad de salida). Eso ahora es código, no solo diseño: `ai_gateway/infrastructure/anthropic_provider.py` implementa `LLMProvider` contra la API de Anthropic — usando *tool use* con `tool_choice` forzado a una única tool nombrada como el `response_model`, el equivalente de Claude al `response_format=json_schema` de OpenAI, ya que Anthropic no tiene un modo de salida estructurada directo. `main.py`'s `_build_providers_by_tier` lo agrega **después** de OpenAI en la lista de `reasoning_creative` cuando ambas keys están configuradas (el orden es lo que decide qué prueba primero `AIGateway`'s loop de fallback), y lo deja como único proveedor de ese tier si solo `VAROS_RE_ANTHROPIC_API_KEY` está seteada — nunca en `safety_classification` ni `structured_extraction`, que el mismo `§2.6` reserva para el modelo económico/dedicado. Anthropic no ofrece una API de embeddings, así que el Agente 11 (Memoria) sigue dependiendo exclusivamente de OpenAI hasta que se conecte un proveedor de embeddings distinto (p. ej. Voyage AI).
+
+## Decisión de diseño: guardianes lingüísticos, no reescritura silenciosa
+
+`docs/PRD.md §2` es no negociable en "nunca afirmar certeza" y "el usuario decide". Los Agentes 7 (Escenarios) y 10 (Síntesis) validan su propia salida contra listas de patrones (`pipeline/agents/_language_guards.py`) buscando lenguaje de futuro afirmativo ("serás", "pasará") o imperativo ("deberías", "debes"). Si lo encuentran, **piden al modelo que regenere** (hasta `max_language_retries` veces) — nunca reescriben o recortan el texto del modelo por su cuenta. Si el lenguaje problemático persiste, el agente falla con `LLMGenerationError` en vez de servir un resultado que viole el principio del producto. Misma lógica de humildad que en Agente 0: listas curadas, no un clasificador lingüístico riguroso.
+
+## Decisión de diseño: Memoria es una mejora, nunca un motivo de fallo
+
+Si el Agente 11 falla, o no hay proveedor de embeddings configurado, `SimulationPipeline` captura el error y deja `memory: null` en la respuesta — la simulación completa (escenarios, comparación, ranking, síntesis) se entrega igual. Guardar memoria semántica es una capa encima de una simulación exitosa, no una precondición de ella (ver `SimulationPipeline._try_build_memory` en `pipeline/orchestrator.py`).
+
+## Decisión de diseño: Aprendizaje vive fuera del pipeline
+
+El Agente 12 no corre en cada `/v1/simulate` — se dispara explícitamente vía `POST /v1/calibrate` cuando un usuario cierra el ciclo de una decisión pasada (`docs/PRD.md`, CU8). Este servicio no conoce `user_id`/`decision_id` ni guarda estado entre llamadas: el caller (Core API) le manda `reported_outcome` + los escenarios/ranking originales (reconstruidos desde lo que ya tiene persistido) y recibe de vuelta el análisis de calibración para que Core API decida qué persistir en `memory`.
+
+## Desarrollo local
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
+cp .env.example .env   # opcionalmente añade VAROS_RE_OPENAI_API_KEY y/o VAROS_RE_ANTHROPIC_API_KEY
+
+uvicorn reality_engine.main:app --reload --port 8100
+```
+
+## Calidad — correr antes de cada commit
+
+```bash
+ruff check src tests
+mypy src
+pytest -v
+```
+
+Los tests corren sin `OPENAI_API_KEY`/`ANTHROPIC_API_KEY` reales: `FakeLLMProvider` cubre el pipeline, `test_openai_provider.py`/`test_anthropic_provider.py` verifican cada adaptador contra un cliente mockeado (prompt/tool wiring, parseo, mapeo de errores) y `test_main.py` verifica el orden de fallback que arma `_build_providers_by_tier` — nunca contra la red.
+
+## Streaming de progreso (`POST /v1/simulate/stream`)
+
+Misma corrida que `/v1/simulate`, pero reportando cada etapa a medida que ocurre: una línea JSON por evento (`application/x-ndjson`), y la última línea es el resultado completo.
+
+```
+{"type":"stage","stage":"safety_gate","status":"started"}
+{"type":"stage","stage":"safety_gate","status":"completed"}
+{"type":"stage","stage":"comprehension","status":"started"}
+...
+{"type":"result","result":{...}}
+```
+
+Decisiones que vale la pena conocer antes de tocarlo:
+
+- **Los ids de etapa son por agente, no por fila de la UI.** Lo que corre es un agente; colapsar doce en las seis etiquetas que muestra la Pantalla 6 metería copy de interfaz dentro del motor. El cliente agrupa y etiqueta (`docs/UX_DESIGN.md` es dueño de esas palabras), y un agente nuevo aparece como un id nuevo en vez de desaparecer en el balde de otro.
+- **Se emiten los dos bordes, `started` y `completed`.** Un cliente que solo escuchara etapas terminadas no tendría nada que mostrar como "en curso", que es justamente el punto de esa pantalla.
+- **Un `halt` del Agente 0 es su propio evento**, no una etapa más: la corrida termina ahí y el cliente debe renderizar una derivación, no seguir esperando escenarios.
+- **Un fallo se dice en banda** (`{"type":"error"}`) antes de cerrar el cuerpo. Para cuando falla, el 200 ya salió — es inherente al streaming — y un cuerpo truncado sería indistinguible de una conexión caída.
+- **Es un endpoint aparte, no un flag sobre `/v1/simulate`.** Las dos formas de respuesta son distintas (un documento vs. una secuencia de líneas), y una ruta que devuelve cualquiera de las dos según un parámetro es una ruta cuyo contrato no se puede escribir.
+- **NDJSON, no SSE ni WebSocket.** El único consumidor es Core API retransmitiendo al cliente Flutter, y el framing de SSE compraría semántica de reconexión que acá no significa nada: el trabajo no es reanudable, así que un cliente que reconecta no tiene a qué reconectarse. Esa es también la razón honesta de que sea un stream sobre una petición y no un WebSocket — la corrida vive y muere con la petición de todos modos, y fingir lo contrario necesita una cola y un worker, no otro socket.

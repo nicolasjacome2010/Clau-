@@ -1,0 +1,76 @@
+# Local development stack for VAR OS.
+# Brings up everything Core API + the Reality Engine need (see
+# docs/ARCHITECTURE.md §14): Postgres (+pgvector-ready image), Redis, and
+# both services.
+#
+# Usage:
+#   docker compose up --build
+#   docker compose exec core-api alembic upgrade head
+#
+# reality-engine has no OPENAI_API_KEY set here on purpose: without one, its
+# safety-classification tier has zero providers and it fails safe on every
+# request (see reality_engine/README.md) — set VAROS_RE_OPENAI_API_KEY in a
+# .env file or your shell to actually exercise the pipeline end to end.
+#
+# core-api has no Stripe keys set here either: without them, billing
+# checkout/portal endpoints return 503 and every webhook is rejected with
+# 400 — set VAROS_STRIPE_SECRET_KEY / VAROS_STRIPE_WEBHOOK_SECRET to
+# exercise billing/ end to end (see backend/.env.example).
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: varos
+      POSTGRES_PASSWORD: varos
+      POSTGRES_DB: varos
+    ports:
+      - "5432:5432"
+    volumes:
+      - varos_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U varos"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  reality-engine:
+    build:
+      context: ./reality_engine
+    ports:
+      - "8100:8100"
+    environment:
+      VAROS_RE_ENVIRONMENT: development
+      VAROS_RE_OPENAI_API_KEY: ${VAROS_RE_OPENAI_API_KEY:-}
+
+  core-api:
+    build:
+      context: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      VAROS_DATABASE_URL: postgresql+asyncpg://varos:varos@postgres:5432/varos
+      VAROS_ENVIRONMENT: development
+      VAROS_REALITY_ENGINE_BASE_URL: http://reality-engine:8100
+      VAROS_STRIPE_SECRET_KEY: ${VAROS_STRIPE_SECRET_KEY:-}
+      VAROS_STRIPE_WEBHOOK_SECRET: ${VAROS_STRIPE_WEBHOOK_SECRET:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      reality-engine:
+        condition: service_started
+
+volumes:
+  varos_postgres_data:

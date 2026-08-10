@@ -1,0 +1,316 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
+import 'package:var_os_app/core/routing/app_routes.dart';
+import 'package:var_os_app/features/billing/presentation/controllers/subscription_controller.dart';
+import 'package:var_os_app/features/billing/presentation/screens/subscription_screen.dart';
+import 'package:var_os_app/features/clarification/presentation/screens/clarification_screen.dart';
+import 'package:var_os_app/features/decisions/domain/decision_ref.dart';
+import 'package:var_os_app/features/decisions/domain/decisions_repository.dart';
+import 'package:var_os_app/features/decisions/presentation/controllers/decisions_controller.dart';
+import 'package:var_os_app/features/goals/presentation/controllers/goals_controller.dart';
+import 'package:var_os_app/features/home/presentation/screens/home_screen.dart';
+import 'package:var_os_app/features/memory/presentation/controllers/bias_profile_controller.dart';
+import 'package:var_os_app/features/settings/domain/settings_repository.dart';
+import 'package:var_os_app/features/settings/presentation/controllers/settings_controller.dart';
+import 'package:var_os_app/features/settings/presentation/screens/settings_screen.dart';
+import 'package:var_os_app/features/simulations/presentation/controllers/decision_simulation_controller.dart';
+import 'package:var_os_app/features/simulations/presentation/screens/decision_result_screen.dart';
+
+import '../billing/fakes.dart';
+import '../decisions/fakes.dart';
+import '../goals/fakes.dart';
+import '../memory/fakes.dart';
+import '../simulations/fakes.dart';
+
+class _StubSettingsRepository implements SettingsRepository {
+  @override
+  Future<ThemeMode> readThemeMode() async => ThemeMode.dark;
+
+  @override
+  Future<void> writeThemeMode(ThemeMode mode) async {}
+}
+
+void main() {
+  Future<void> pumpHome(
+    WidgetTester tester, {
+    required DecisionsRepository repository,
+  }) async {
+    // A real router, not a bare `MaterialApp`: Home's capture field pushes
+    // Clarificación and its decision cards push the result screen, so
+    // navigation is part of what these tests exercise.
+    final router = GoRouter(
+      initialLocation: AppRoutes.home,
+      routes: [
+        GoRoute(
+          path: AppRoutes.home,
+          builder: (context, state) => const HomeScreen(),
+        ),
+        GoRoute(
+          path: AppRoutes.clarification,
+          builder: (context, state) =>
+              ClarificationScreen(rawInput: state.extra! as String),
+        ),
+        GoRoute(
+          path: AppRoutes.settings,
+          builder: (context, state) => const SettingsScreen(),
+        ),
+        GoRoute(
+          path: AppRoutes.subscription,
+          builder: (context, state) => const SubscriptionScreen(),
+        ),
+        GoRoute(
+          path: AppRoutes.decisionResult,
+          builder: (context, state) {
+            final decision = state.extra! as DecisionRef;
+            return DecisionResultScreen(
+              decisionId: decision.id,
+              title: decision.title,
+            );
+          },
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          decisionsRepositoryProvider.overrideWithValue(repository),
+          memoryRepositoryProvider.overrideWithValue(FakeMemoryRepository()),
+          goalsRepositoryProvider.overrideWithValue(FakeGoalsRepository()),
+          simulationsRepositoryProvider.overrideWithValue(
+            FakeSimulationsRepository(),
+          ),
+          billingRepositoryProvider.overrideWithValue(FakeBillingRepository()),
+          // Ajustes would otherwise reach for the platform's real
+          // preference store, which a widget test has no plugin for.
+          settingsRepositoryProvider.overrideWithValue(
+            _StubSettingsRepository(),
+          ),
+        ],
+        child: MaterialApp.router(routerConfig: router),
+      ),
+    );
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('shows active decisions returned by the repository', (
+    tester,
+  ) async {
+    await pumpHome(
+      tester,
+      repository: FakeDecisionsRepository(
+        decisions: [
+          testDecision(
+            id: '1',
+            title: 'Oferta de trabajo Z',
+            status: 'simulating',
+          ),
+          testDecision(
+            id: '2',
+            title: 'Mudarme a Lisboa',
+            vertical: 'relocation',
+            status: 'draft',
+          ),
+        ],
+      ),
+    );
+
+    expect(find.text('Oferta de trabajo Z'), findsOneWidget);
+    expect(find.text('Simulando'), findsOneWidget);
+    expect(find.text('Mudarme a Lisboa'), findsOneWidget);
+    expect(find.text('Borrador'), findsOneWidget);
+  });
+
+  testWidgets('filters out completed/archived decisions', (tester) async {
+    await pumpHome(
+      tester,
+      repository: FakeDecisionsRepository(
+        decisions: [
+          testDecision(id: '1', title: 'Activa', status: 'clarifying'),
+          testDecision(id: '2', title: 'Ya completada', status: 'completed'),
+        ],
+      ),
+    );
+
+    expect(find.text('Activa'), findsOneWidget);
+    expect(find.text('Ya completada'), findsNothing);
+  });
+
+  testWidgets(
+    'shows an empty-state message when there are no active decisions',
+    (tester) async {
+      await pumpHome(tester, repository: FakeDecisionsRepository());
+
+      expect(find.text('Aún no tienes decisiones activas.'), findsOneWidget);
+    },
+  );
+
+  testWidgets('shows a retry affordance on failure', (tester) async {
+    await pumpHome(
+      tester,
+      repository: FakeDecisionsRepository(
+        error: DecisionsRepositoryError('network down'),
+      ),
+    );
+
+    expect(find.text('No pudimos cargar tus decisiones.'), findsOneWidget);
+    expect(find.text('Reintentar'), findsOneWidget);
+
+    await tester.tap(find.text('Reintentar'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('No pudimos cargar tus decisiones.'), findsOneWidget);
+  });
+
+  testWidgets('switching to the Mis Decisiones tab shows the real list', (
+    tester,
+  ) async {
+    await pumpHome(
+      tester,
+      repository: FakeDecisionsRepository(
+        decisions: [
+          testDecision(
+            id: '1',
+            title: 'Oferta de trabajo Z',
+            status: 'simulating',
+          ),
+        ],
+      ),
+    );
+
+    await tester.tap(find.text('Mis Decisiones'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Activas'), findsOneWidget);
+    expect(find.text('Oferta de trabajo Z'), findsWidgets);
+  });
+
+  testWidgets('switching to the Memoria tab shows the real bias profile', (
+    tester,
+  ) async {
+    await pumpHome(tester, repository: FakeDecisionsRepository());
+
+    await tester.tap(find.text('Memoria'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Calibración'), findsOneWidget);
+  });
+
+  testWidgets('switching to the Perfil tab shows the real goals profile', (
+    tester,
+  ) async {
+    await pumpHome(tester, repository: FakeDecisionsRepository());
+
+    await tester.tap(find.text('Perfil'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Tus objetivos'), findsOneWidget);
+  });
+
+  testWidgets('tapping the mic shows a coming-soon notice', (tester) async {
+    await pumpHome(tester, repository: FakeDecisionsRepository());
+
+    await tester.tap(find.byIcon(Icons.mic_none));
+    await tester.pump();
+
+    expect(
+      find.text('La captura de voz llega en un próximo módulo.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('submitting the decision input opens Clarificación', (
+    tester,
+  ) async {
+    await pumpHome(tester, repository: FakeDecisionsRepository());
+
+    await tester.enterText(find.byType(TextField), '¿Debo renunciar?');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ClarificationScreen), findsOneWidget);
+    expect(find.text('¿De qué área es esta decisión?'), findsOneWidget);
+  });
+
+  testWidgets('submitting an empty input does nothing', (tester) async {
+    await pumpHome(tester, repository: FakeDecisionsRepository());
+
+    await tester.enterText(find.byType(TextField), '   ');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ClarificationScreen), findsNothing);
+  });
+
+  testWidgets('tapping an active decision opens its result screen', (
+    tester,
+  ) async {
+    await pumpHome(
+      tester,
+      repository: FakeDecisionsRepository(
+        decisions: [
+          testDecision(
+            id: 'd1',
+            title: 'Oferta de trabajo Z',
+            status: 'simulating',
+          ),
+        ],
+      ),
+    );
+
+    await tester.tap(find.text('Oferta de trabajo Z'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(DecisionResultScreen), findsOneWidget);
+    expect(
+      find.text('Esta decisión todavía no se ha simulado.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('uses a bottom NavigationBar on mobile widths', (tester) async {
+    tester.view.physicalSize = const Size(400, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await pumpHome(tester, repository: FakeDecisionsRepository());
+
+    expect(find.byType(NavigationBar), findsOneWidget);
+    expect(find.byType(NavigationRail), findsNothing);
+  });
+
+  testWidgets('uses a NavigationRail on tablet+ widths', (tester) async {
+    tester.view.physicalSize = const Size(900, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await pumpHome(tester, repository: FakeDecisionsRepository());
+
+    expect(find.byType(NavigationRail), findsOneWidget);
+    expect(find.byType(NavigationBar), findsNothing);
+  });
+
+  testWidgets('the account icon opens Suscripción', (tester) async {
+    await pumpHome(tester, repository: FakeDecisionsRepository());
+
+    // By tooltip, not by icon: the Perfil nav destination uses the same
+    // glyph, and a finder that matches both would be ambiguous.
+    await tester.tap(find.byTooltip('Suscripción'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(SubscriptionScreen), findsOneWidget);
+  });
+
+  testWidgets('the settings icon opens Ajustes', (tester) async {
+    await pumpHome(tester, repository: FakeDecisionsRepository());
+
+    await tester.tap(find.byTooltip('Ajustes'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(SettingsScreen), findsOneWidget);
+  });
+}

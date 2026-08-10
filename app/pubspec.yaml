@@ -1,0 +1,54 @@
+name: var_os_app
+description: "VAR OS — Variable Reality Operating System. Flutter client (docs/ARCHITECTURE.md §3, docs/UX_DESIGN.md)."
+publish_to: 'none'
+
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.9.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State management (docs/ARCHITECTURE.md §3: "Riverpod ... preferido sobre
+  # Bloc por menor boilerplate y mejor DX en un equipo pequeño"). This first
+  # increment uses the classic (non-generated) `Notifier` API rather than
+  # `riverpod_generator` — a documented, deliberate scope cut (not a silent
+  # one, same pattern as docs/ARCHITECTURE.md §0): codegen earns its keep
+  # once the provider graph is large enough that boilerplate reduction
+  # outweighs an extra build_runner step in CI. Revisit once feature count
+  # grows past onboarding/auth.
+  flutter_riverpod: ^2.6.1
+
+  # Declarative navigation with deep-linking (needed for "cierre de ciclo"
+  # notifications, docs/ARCHITECTURE.md §3).
+  go_router: ^14.6.2
+
+  # HTTP client for the Core API, with interceptors (auth, refresh token,
+  # structured logging — docs/ARCHITECTURE.md §3).
+  dio: ^5.7.0
+
+  # Inter (body) and JetBrains Mono (probability/score figures) are both on
+  # Google Fonts. "Fragment" (docs/UX_DESIGN.md §1.2, display/headlines) is
+  # not a freely redistributable font family — Space Grotesk is used as the
+  # closest openly-licensed geometric-display substitute. This is a
+  # documented deviation (see app/README.md), same pattern as
+  # docs/ARCHITECTURE.md §0.
+  google_fonts: ^6.2.1
+
+  cupertino_icons: ^1.0.8
+  supabase_flutter: ^2.16.0
+  url_launcher: ^6.3.2
+  shared_preferences: ^2.5.5
+  share_plus: ^12.0.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^5.0.0
+  http: ^1.6.0
+
+flutter:
+  uses-material-design: true

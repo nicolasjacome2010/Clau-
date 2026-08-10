@@ -1,0 +1,41 @@
+from __future__ import annotations
+
+from collections.abc import AsyncIterator
+
+import pytest_asyncio
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from core_api.billing.infrastructure import models as billing_models  # noqa: F401
+from core_api.db import Base, create_engine, create_session_factory
+from core_api.decisions.infrastructure import models as decisions_models  # noqa: F401
+from core_api.goals.infrastructure import models as goals_models  # noqa: F401
+from core_api.identity.infrastructure import models as identity_models  # noqa: F401
+from core_api.memory.infrastructure import models as memory_models  # noqa: F401
+from core_api.simulations.infrastructure import models as simulations_models  # noqa: F401
+
+
+@pytest_asyncio.fixture
+async def sqlite_session() -> AsyncIterator[AsyncSession]:
+    """A fresh in-memory SQLite database per test.
+
+    Used for infrastructure-layer tests that need a *real* ORM round-trip
+    (autoincrement defaults, constraints, upsert fallback path) without the
+    cost/flakiness of spinning up Postgres in CI for a single-service test
+    suite. Cross-database portability is verified explicitly in
+    `identity/infrastructure/repository.py` (see the dialect branch in
+    `SqlAlchemyUserProfileRepository.upsert`).
+    """
+    engine = create_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as conn:
+        # SQLite ignores foreign keys unless asked, and this schema leans on
+        # `ON DELETE CASCADE` from `users.id` for erasure (docs/DATABASE.md).
+        # Without the pragma the tests would happily "pass" while the
+        # cascade they claim to verify never ran.
+        await conn.exec_driver_sql("PRAGMA foreign_keys=ON")
+        await conn.run_sync(Base.metadata.create_all)
+
+    session_factory = create_session_factory(engine)
+    async with session_factory() as session:
+        yield session
+
+    await engine.dispose()
