@@ -4,11 +4,17 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:var_os_app/core/routing/app_routes.dart';
 import 'package:var_os_app/features/auth/presentation/screens/auth_screen.dart';
+import 'package:var_os_app/features/onboarding/presentation/controllers/pending_goals_flusher.dart';
 import 'package:var_os_app/features/onboarding/presentation/screens/onboarding_screen.dart';
 import 'package:var_os_app/features/onboarding/presentation/widgets/goal_chip.dart';
 
+import 'fakes.dart';
+
 void main() {
-  Future<void> pumpOnboarding(WidgetTester tester) async {
+  Future<void> pumpOnboarding(
+    WidgetTester tester, {
+    FakePendingGoalsStore? store,
+  }) async {
     final router = GoRouter(
       initialLocation: AppRoutes.onboarding,
       routes: [
@@ -23,7 +29,14 @@ void main() {
       ],
     );
     await tester.pumpWidget(
-      ProviderScope(child: MaterialApp.router(routerConfig: router)),
+      ProviderScope(
+        overrides: [
+          pendingGoalsStoreProvider.overrideWithValue(
+            store ?? FakePendingGoalsStore(),
+          ),
+        ],
+        child: MaterialApp.router(routerConfig: router),
+      ),
     );
     await tester.pumpAndSettle();
   }
@@ -78,6 +91,45 @@ void main() {
     await tester.tap(find.text('Continuar'));
     await tester.pumpAndSettle();
 
+    expect(find.byType(AuthScreen), findsOneWidget);
+  });
+
+  testWidgets('the chosen goals are queued before leaving for auth', (
+    tester,
+  ) async {
+    // The whole point of the queue: Pantalla 3 can send the user out of the
+    // app (magic link), so the selection has to be on disk before we
+    // navigate, not after we come back.
+    final store = FakePendingGoalsStore();
+    await pumpOnboarding(tester, store: store);
+    await tester.tap(find.text('Continuar →'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Continuar →'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Salud/bienestar'));
+    await tester.tap(find.text('Estabilidad financiera'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Continuar'));
+    await tester.pumpAndSettle();
+
+    // Stored in the spec's own chip order, not the tap order.
+    expect(await store.read(), ['Estabilidad financiera', 'Salud/bienestar']);
+  });
+
+  testWidgets('skipping goal selection queues nothing at all', (tester) async {
+    final store = FakePendingGoalsStore();
+    await pumpOnboarding(tester, store: store);
+    await tester.tap(find.text('Continuar →'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Continuar →'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Continuar'));
+    await tester.pumpAndSettle();
+
+    expect(await store.read(), isEmpty);
     expect(find.byType(AuthScreen), findsOneWidget);
   });
 }

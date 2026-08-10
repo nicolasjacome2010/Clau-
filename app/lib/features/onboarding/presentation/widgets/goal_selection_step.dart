@@ -8,9 +8,10 @@ import '../../../goals/domain/goal_option.dart';
 import '../controllers/onboarding_controller.dart';
 import 'goal_chip.dart';
 
-/// Paso 3 of Pantalla 2 (docs/UX_DESIGN.md): initial life-goal capture,
-/// feeding the backend's `goals` bounded context once auth exists (see
-/// `onboarding_repository.dart`).
+/// Paso 3 of Pantalla 2 (docs/UX_DESIGN.md): initial life-goal capture.
+/// The selection reaches the backend's `goals` bounded context at the
+/// first authenticated moment, not from here — see
+/// `pending_goals_store.dart` for why that ordering is forced.
 class GoalSelectionStep extends ConsumerStatefulWidget {
   const GoalSelectionStep({super.key});
 

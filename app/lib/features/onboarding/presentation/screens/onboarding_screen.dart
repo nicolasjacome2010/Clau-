@@ -67,12 +67,16 @@ class OnboardingScreen extends ConsumerWidget {
                 vertical: VarSpacing.md,
               ),
               child: ElevatedButton(
-                onPressed: () {
-                  if (state.isLastStep) {
-                    context.go(AppRoutes.auth);
-                  } else {
+                onPressed: () async {
+                  if (!state.isLastStep) {
                     controller.nextStep();
+                    return;
                   }
+                  // Queued before navigating, never after: the next screen
+                  // can send the user out of the app entirely (magic link),
+                  // and an unsaved selection would not survive that.
+                  await controller.finish();
+                  if (context.mounted) context.go(AppRoutes.auth);
                 },
                 child: Text(state.isLastStep ? 'Continuar' : 'Continuar →'),
               ),

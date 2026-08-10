@@ -2,10 +2,15 @@ import 'package:var_os_app/features/goals/domain/goal.dart';
 import 'package:var_os_app/features/goals/domain/goals_repository.dart';
 
 class FakeGoalsRepository implements GoalsRepository {
-  FakeGoalsRepository({List<Goal>? goals, this.error}) : _goals = [...?goals];
+  FakeGoalsRepository({List<Goal>? goals, this.error, this.failCreateAfter})
+    : _goals = [...?goals];
 
   final List<Goal> _goals;
   final GoalsRepositoryError? error;
+
+  /// Lets `createGoal` succeed this many times, then fail every call after
+  /// — how a test reproduces a backend that dies part-way through a batch.
+  final int? failCreateAfter;
 
   final List<({String name, int weight})> createCalls = [];
   final List<({String id, int? weight, bool? isActive})> updateCalls = [];
@@ -22,6 +27,9 @@ class FakeGoalsRepository implements GoalsRepository {
     required String name,
     int defaultWeight = 50,
   }) async {
+    if (failCreateAfter != null && createCalls.length >= failCreateAfter!) {
+      throw GoalsRepositoryError('create failed');
+    }
     createCalls.add((name: name, weight: defaultWeight));
     final created = Goal(
       id: 'goal-${_goals.length + 1}',
